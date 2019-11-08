@@ -1,0 +1,21 @@
+{
+  "location": "Hyderabad",
+  "type": "movies",
+  "name": "Saaho",
+  "lang": "Telugu",
+  "format": "2D",
+  "theatres": ["Large Screen"],
+  "timerange": {
+    "start": "1700",
+    "end": "2030"
+  },
+  "people": "5",
+  "rows": {
+    "start": "2",
+    "end": "10"
+  },
+  "sendEmail": {
+    "user": "youremail@gmail.com",
+    "pass": "y0urPa$$w0rD"
+  }
+}
