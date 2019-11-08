@@ -1,0 +1,17 @@
+{
+  "name": "bms-bot",
+  "version": "1.0.0",
+  "description": "a bot for booking ticket on BookMyShow",
+  "main": "index.js",
+  "author": "Krushi Raj Tula <krushiraj123@gmail.com>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "chromedriver": "^76.0.0",
+    "gmail-send": "^1.8.10",
+    "selenium-webdriver": "^4.0.0-alpha.4"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
