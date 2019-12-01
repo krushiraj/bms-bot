@@ -28,3 +28,9 @@ txtCVV
 
 UPI
 txtMobileId
+
+Have better generic model for scraping/crawling. Use some generic functions and a config file to map to different elements and actions.
+Use CSS/XPath selectors collection stored in a config file for easy updates.
+Use a logger to log if there are any issues or to find if a scrapper is outdated because of UI changes or website revamps on the provider sites.
+Try using puppeteer instead of selenium. It can provide a head less version of chrome and even allows to take screenshots of how the dom looks when rendered.
+Make a POC using puppeteer and see if we can use to full extent to build this bot.
