@@ -10,3 +10,8 @@ Make sure you have the `chromedriver` executable in the root directory of the pr
 Run `yarn install` in the root directory of the project.
 
 Run `yarn start` to run the script.
+
+##Caution
+Just check whether the current version of chrome driver is installed and is present in package.json.
+If not,
+Run npm i chromedriver
