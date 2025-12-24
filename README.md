@@ -1,189 +1,70 @@
-# Movie Booking Automation - Playwright Learning Project
+# BMS Bot
 
-A hands-on project to learn browser automation using Playwright through a movie ticket booking scenario.
+Automated movie ticket booking for BookMyShow via Telegram bot.
 
-## 🎯 Learning Objectives
+## Features
 
-By working through this project, you'll learn:
+- Telegram bot interface for creating booking jobs
+- Gift card management with encryption
+- Watch mode: monitors BMS for ticket availability
+- Smart seat selection algorithm
+- Automatic booking when tickets go live
 
-1. **Playwright Fundamentals** - Browser launching, navigation, selectors
-2. **Page Object Model (POM)** - Scalable architecture for automation
-3. **Configuration Management** - Flexible, environment-based settings
-4. **Waiting Strategies** - Handling dynamic content reliably
-5. **Form Interactions** - Clicks, typing, dropdowns, seat selection
-6. **State Management** - Cookies, storage, authentication
-7. **Error Handling** - Retries, timeouts, graceful failures
-8. **Parallel Execution** - Running multiple browser instances
-
-## 📁 Project Structure
-
-```
-movie-booking-automation/
-├── src/
-│   ├── config/
-│   │   └── config.js          # Centralized configuration
-│   ├── pages/                  # Page Object Model classes
-│   │   ├── BasePage.js        # Common page utilities
-│   │   ├── HomePage.js        # Movie search page
-│   │   ├── TheatrePage.js     # Theatre/showtime selection
-│   │   ├── SeatPage.js        # Seat selection logic
-│   │   └── PaymentPage.js     # Payment flow
-│   ├── utils/
-│   │   ├── browser.js         # Browser setup utilities
-│   │   ├── selectors.js       # Selector strategies
-│   │   └── waitHelpers.js     # Custom wait utilities
-│   ├── strategies/
-│   │   └── seatSelection.js   # Seat selection algorithms
-│   └── index.js               # Main entry point
-├── tests/                      # Test/demo scripts
-│   └── demo.spec.js           # Playwright test examples
-├── mock-site/                  # Local mock booking site for practice
-│   ├── index.html
-│   └── app.js
-├── playwright.config.js        # Playwright configuration
-├── package.json
-└── README.md
-```
-
-## 🚀 Getting Started
+## Setup
 
 ### Prerequisites
-- Node.js 18+ installed
-- Basic JavaScript knowledge
 
-### Installation
+- Node.js 20+
+- Docker (for local Postgres + Redis)
+- Telegram Bot Token (from @BotFather)
 
-```bash
-cd movie-booking-automation
-npm install
-npx playwright install  # Downloads browser binaries
-```
+### Local Development
 
-### Running the Mock Site (for practice)
+1. Start databases:
+   ```bash
+   docker-compose up -d
+   ```
 
-```bash
-npm run mock-site
-# Opens a local booking site at http://localhost:3000
-```
+2. Create `.env` from example:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your values
+   ```
 
-### Running the Automation
+3. Generate encryption key:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
 
-```bash
-# Run in headed mode (see the browser)
-npm run start:headed
+4. Setup database:
+   ```bash
+   yarn db:push
+   ```
 
-# Run in headless mode
-npm run start
+5. Run in development:
+   ```bash
+   yarn dev
+   ```
 
-# Run tests
-npm test
-```
+### Deployment (Railway)
 
-## 📚 Key Concepts Explained
+1. Create new Railway project
+2. Add PostgreSQL and Redis services
+3. Connect GitHub repo
+4. Set environment variables
+5. Deploy!
 
-### 1. Page Object Model (POM)
+## Commands
 
-Instead of writing selectors everywhere, we encapsulate page interactions:
+| Command | Description |
+|---------|-------------|
+| /start | Register and get welcome message |
+| /help | Show available commands |
+| /newjob | Create a new booking job |
+| /myjobs | List your booking jobs |
+| /addcard | Add a gift card |
+| /mycards | List your gift cards |
 
-```javascript
-// ❌ Bad - selectors scattered in code
-await page.click('.movie-card[data-id="123"]');
-await page.click('.showtime-btn');
+## Architecture
 
-// ✅ Good - Page Object encapsulation
-const homePage = new HomePage(page);
-await homePage.selectMovie('Inception');
-await homePage.pickShowtime('10:00 AM');
-```
-
-### 2. Selector Strategies (Priority Order)
-
-```javascript
-// 1. Test IDs (most reliable)
-page.locator('[data-testid="book-button"]')
-
-// 2. Role-based (accessible)
-page.getByRole('button', { name: 'Book Now' })
-
-// 3. Text content
-page.getByText('Book Now')
-
-// 4. CSS selectors (less preferred)
-page.locator('.book-btn')
-
-// 5. XPath (last resort)
-page.locator('//button[contains(text(), "Book")]')
-```
-
-### 3. Waiting Strategies
-
-```javascript
-// Wait for element to be visible
-await page.waitForSelector('.seats-container', { state: 'visible' });
-
-// Wait for network idle (all requests complete)
-await page.waitForLoadState('networkidle');
-
-// Wait for specific response
-await page.waitForResponse(resp => resp.url().includes('/api/seats'));
-
-// Custom polling wait
-await expect(page.locator('.seat.available')).toHaveCount(100, { timeout: 10000 });
-```
-
-### 4. Configuration Pattern
-
-All configurable values are centralized:
-
-```javascript
-// config.js
-module.exports = {
-  movie: {
-    name: 'Movie Name',
-    date: '2024-01-15',
-    preferredShowtimes: ['10:00 AM', '10:30 AM'],
-  },
-  theatres: ['PVR Phoenix', 'INOX GVK One'],
-  seats: {
-    count: 2,
-    preference: 'center',  // center, aisle, back
-    rows: ['G', 'H', 'I'], // preferred rows
-  },
-  browser: {
-    headless: false,
-    slowMo: 100,  // slow down for debugging
-  }
-};
-```
-
-## 🔧 Customization
-
-Edit `src/config/config.js` to modify:
-- Target movie and date
-- Preferred theatres (priority order)
-- Seat selection strategy
-- Number of tickets
-- Browser behavior
-
-## 📖 Learning Path
-
-1. **Start here**: Read through `src/pages/BasePage.js` to understand the foundation
-2. **Understand flow**: Trace through `src/index.js` to see the booking flow
-3. **Practice selectors**: Modify `src/utils/selectors.js` 
-4. **Experiment**: Change seat selection logic in `src/strategies/seatSelection.js`
-5. **Test**: Write your own tests in `tests/` directory
-
-## ⚠️ Important Notes
-
-- This is a **learning project** - use with mock sites only
-- Real booking platforms have anti-bot measures and prohibit automation
-- The patterns learned here apply to legitimate automation tasks:
-  - Testing your own web applications
-  - Automating internal business processes
-  - Web scraping where permitted
-
-## 🔗 Resources
-
-- [Playwright Documentation](https://playwright.dev/docs/intro)
-- [Playwright Selectors Guide](https://playwright.dev/docs/selectors)
-- [Page Object Model Pattern](https://playwright.dev/docs/pom)
+See [Design Document](docs/plans/2025-12-25-bms-automation-design.md) for full details.
