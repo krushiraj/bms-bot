@@ -1,32 +1,38 @@
 {
-  "name": "movie-booking-automation",
+  "name": "bms-bot",
   "version": "1.0.0",
-  "description": "Learn Playwright through a movie booking automation scenario",
-  "main": "src/index.js",
+  "description": "BookMyShow ticket booking automation service",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "start:headed": "HEADLESS=false node src/index.js",
-    "start:debug": "DEBUG=true HEADLESS=false node src/index.js",
-    "test": "npx playwright test",
-    "test:headed": "npx playwright test --headed",
-    "test:debug": "npx playwright test --debug",
-    "mock-site": "node mock-site/server.js",
-    "codegen": "npx playwright codegen",
-    "report": "npx playwright show-report"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": [
-    "playwright",
-    "automation",
-    "learning",
-    "browser-automation"
-  ],
+  "keywords": ["bookmyshow", "automation", "telegram-bot", "playwright"],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "playwright": "^1.40.0"
+    "@prisma/client": "^5.7.0",
+    "bullmq": "^5.1.0",
+    "fastify": "^4.25.0",
+    "grammy": "^1.21.0",
+    "ioredis": "^5.3.2",
+    "playwright": "^1.40.0",
+    "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.40.0"
+    "@types/node": "^20.10.0",
+    "prisma": "^5.7.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.1.0"
   }
 }
