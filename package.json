@@ -1,17 +1,32 @@
 {
-  "name": "bms-bot",
+  "name": "movie-booking-automation",
   "version": "1.0.0",
-  "description": "a bot for booking ticket on BookMyShow",
-  "main": "index.js",
-  "author": "Krushi Raj Tula <krushiraj123@gmail.com>",
-  "license": "MIT",
-  "private": false,
-  "dependencies": {
-    "chromedriver": "^79.0.2",
-    "gmail-send": "^1.8.10",
-    "selenium-webdriver": "^4.0.0-alpha.4"
-  },
+  "description": "Learn Playwright through a movie booking automation scenario",
+  "main": "src/index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js",
+    "start:headed": "HEADLESS=false node src/index.js",
+    "start:debug": "DEBUG=true HEADLESS=false node src/index.js",
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "mock-site": "node mock-site/server.js",
+    "codegen": "npx playwright codegen",
+    "report": "npx playwright show-report"
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "learning",
+    "browser-automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
   }
 }
