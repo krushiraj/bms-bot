@@ -3,6 +3,12 @@ import { config } from '../utils/config.js';
 import { logger } from '../utils/logger.js';
 import { startCommand } from './commands/start.js';
 import { helpCommand } from './commands/help.js';
+import {
+  addCardCommand,
+  addCardWithArgs,
+  myCardsCommand,
+  removeCardCommand,
+} from './commands/cards.js';
 
 export interface SessionData {
   step?: string;
@@ -23,6 +29,21 @@ bot.use(
 // Register commands
 bot.command('start', startCommand);
 bot.command('help', helpCommand);
+
+// Gift card commands
+bot.command('addcard', async (ctx) => {
+  const args = ctx.match?.toString().split(/\s+/).filter(Boolean) ?? [];
+  if (args.length >= 2) {
+    await addCardWithArgs(ctx, args);
+  } else {
+    await addCardCommand(ctx);
+  }
+});
+bot.command('mycards', myCardsCommand);
+bot.command('removecard', async (ctx) => {
+  const args = ctx.match?.toString().split(/\s+/).filter(Boolean) ?? [];
+  await removeCardCommand(ctx, args);
+});
 
 // Error handler
 bot.catch((err) => {
