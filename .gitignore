@@ -29,3 +29,14 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Logs
+*.log
+
+# Additional IDE
+*.swp
+*.swo
