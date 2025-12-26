@@ -65,6 +65,30 @@ Automated movie ticket booking for BookMyShow via Telegram bot.
 | /addcard | Add a gift card |
 | /mycards | List your gift cards |
 
+## Automation
+
+The automation layer uses Playwright to interact with BookMyShow.
+
+### Testing the Booking Flow
+
+```bash
+# Run headed (visible browser) for debugging
+yarn test:booking
+
+# Run headless
+HEADLESS=true yarn tsx src/automation/testBooking.ts
+
+# With custom movie/city
+TEST_MOVIE="Pushpa 2" TEST_CITY="bangalore" yarn test:booking
+```
+
+### Architecture
+
+- `src/automation/browser.ts` - Browser management with stealth config
+- `src/automation/pages/` - Page Object Model classes
+- `src/automation/seatSelector.ts` - Seat scoring algorithm
+- `src/automation/bookingFlow.ts` - Full booking orchestration
+
 ## Architecture
 
 See [Design Document](docs/plans/2025-12-25-bms-automation-design.md) for full details.
