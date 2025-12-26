@@ -57,6 +57,10 @@ export function scoreSeat(
   const minRow = prefs.avoidBottomRows;
   const usableRows = totalRows - minRow;
 
+  if (usableRows <= 0) {
+    return 0.1; // No usable rows, return minimal score
+  }
+
   if (rowNumber <= minRow) {
     return 0.1; // Penalize front rows heavily
   }
@@ -67,13 +71,16 @@ export function scoreSeat(
   const verticalScore = Math.max(0, 1 - rowDistance / usableRows);
 
   // Horizontal score: prefer center
+  if (maxSeatsPerRow === 0) {
+    return 0;
+  }
   const centerSeat = maxSeatsPerRow / 2;
   const seatDistance = Math.abs(seat.number - centerSeat);
   const horizontalScore = Math.max(0, 1 - seatDistance / (maxSeatsPerRow / 2));
 
-  // Corner penalty
+  // Corner penalty - only apply to actual usable rows at edges
   const isCorner =
-    (rowNumber <= minRow + 2 || rowNumber >= totalRows - 1) &&
+    (rowNumber === minRow + 1 || rowNumber === totalRows) &&
     (seat.number <= 2 || seat.number >= maxSeatsPerRow - 1);
   const cornerPenalty = isCorner ? 0.3 : 0;
 
@@ -98,7 +105,9 @@ export function findConsecutiveGroups(
 
     let isConsecutive = true;
     for (let j = 1; j < group.length; j++) {
-      if (group[j]!.number !== group[j - 1]!.number + 1) {
+      const current = group[j];
+      const previous = group[j - 1];
+      if (current && previous && current.number !== previous.number + 1) {
         isConsecutive = false;
         break;
       }
