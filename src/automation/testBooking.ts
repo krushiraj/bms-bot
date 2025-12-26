@@ -7,30 +7,36 @@ import 'dotenv/config';
 import { BookingFlow, BookingConfig } from './bookingFlow.js';
 import { logger } from '../utils/logger.js';
 
-async function main() {
-  const flow = new BookingFlow();
+// Module-scoped flow instance for cleanup access
+let flow: BookingFlow | null = null;
 
-  const config: BookingConfig = {
-    movieName: 'Pushpa 2', // Change to a movie currently showing
-    city: 'hyderabad',
-    theatres: ['PVR', 'INOX', 'Cinepolis'], // Partial names work
-    preferredTimes: ['7:00', '8:00', '9:00'],
-    seatPrefs: {
-      count: 2,
-      avoidBottomRows: 3,
-      preferCenter: true,
-      needAdjacent: true,
-    },
-    userEmail: 'test@example.com',
-    userPhone: '9876543210',
-    giftCards: [
-      // Add real gift card for actual test
-      // { cardNumber: '1234567890123456', pin: '1234' },
-    ],
-  };
+const config: BookingConfig = {
+  movieName: process.env.TEST_MOVIE || 'Pushpa 2',
+  city: process.env.TEST_CITY || 'hyderabad',
+  theatres: ['PVR', 'INOX', 'Cinepolis'],
+  preferredTimes: ['7:00', '8:00', '9:00'],
+  seatPrefs: {
+    count: 2,
+    avoidBottomRows: 3,
+    preferCenter: true,
+    needAdjacent: true,
+  },
+  userEmail: 'test@example.com',
+  userPhone: '9876543210',
+  giftCards: [],
+};
+
+async function cleanup(): Promise<void> {
+  if (flow) {
+    await flow.cleanup();
+    flow = null;
+  }
+}
+
+async function main(): Promise<void> {
+  flow = new BookingFlow();
 
   try {
-    // Run in headed mode for debugging
     const headless = process.env.HEADLESS !== 'false';
     logger.info('Starting test booking', { headless, movie: config.movieName });
 
@@ -50,12 +56,15 @@ async function main() {
       });
     }
   } catch (error) {
-    logger.error('Test failed', { error: String(error) });
+    logger.error('Test failed', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error;
   } finally {
-    await flow.cleanup();
+    await cleanup();
 
     if (process.env.HEADLESS === 'false') {
-      // Keep process alive briefly to see final state
       logger.info('Test complete. Exiting in 5 seconds...');
       await new Promise(resolve => setTimeout(resolve, 5000));
     } else {
@@ -64,4 +73,23 @@ async function main() {
   }
 }
 
-main();
+// Signal handlers for graceful shutdown
+process.on('SIGINT', async () => {
+  logger.info('Received SIGINT, cleaning up...');
+  await cleanup();
+  process.exit(130);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('Received SIGTERM, cleaning up...');
+  await cleanup();
+  process.exit(143);
+});
+
+// Run with proper error handling
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    logger.error('Unhandled error in main', { error: String(error) });
+    process.exit(1);
+  });
