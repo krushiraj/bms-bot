@@ -32,10 +32,14 @@ export abstract class BasePage {
   }
 
   async clickAndWait(selector: string): Promise<void> {
-    await Promise.all([
-      this.page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-      this.page.click(selector),
-    ]);
+    try {
+      await this.page.locator(selector).click();
+      await this.page.waitForLoadState('domcontentloaded');
+      logger.debug(`Clicked and waited: ${selector}`);
+    } catch (error) {
+      logger.error(`Failed to click and wait: ${selector}`, { error });
+      throw error;
+    }
   }
 
   async fill(selector: string, value: string): Promise<void> {
