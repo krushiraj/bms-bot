@@ -45,9 +45,18 @@ export class PaymentPage extends BasePage {
     }
   }
 
-  async fillContactDetails(email: string, phone: string): Promise<void> {
+  async fillContactDetails(email: string, phone: string): Promise<boolean> {
     try {
       logger.info('Filling contact details');
+
+      // Basic validation
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        logger.warn('Invalid email format', { email: email.substring(0, 3) + '***' });
+      }
+
+      if (phone && !/^\d{10,15}$/.test(phone.replace(/\D/g, ''))) {
+        logger.warn('Invalid phone format');
+      }
 
       const emailInput = this.page.locator(this.selectors.emailInput).first();
       if (await emailInput.isVisible()) {
@@ -58,8 +67,11 @@ export class PaymentPage extends BasePage {
       if (await phoneInput.isVisible()) {
         await phoneInput.fill(phone);
       }
+
+      return true;
     } catch (error) {
-      logger.warn('Could not fill contact details', { error });
+      logger.error('Failed to fill contact details', { error: String(error) });
+      return false;
     }
   }
 
@@ -78,11 +90,19 @@ export class PaymentPage extends BasePage {
 
   async applyGiftCard(cardNumber: string, pin: string): Promise<boolean> {
     try {
-      if (!cardNumber || !pin) {
-        logger.error('Invalid gift card credentials');
+      // Validate card number (typically 16 digits)
+      if (!cardNumber || cardNumber.length < 10) {
+        logger.error('Invalid gift card number format');
         return false;
       }
 
+      // Validate PIN (typically 4-6 digits)
+      if (!pin || pin.length < 4 || !/^\d+$/.test(pin)) {
+        logger.error('Invalid gift card PIN format');
+        return false;
+      }
+
+      // Log with masked card number only
       logger.info('Applying gift card', { cardNumber: `****${cardNumber.slice(-4)}` });
 
       // Enter card number
@@ -105,14 +125,15 @@ export class PaymentPage extends BasePage {
       const hasError = await this.isVisible(this.selectors.giftCardError, 2000);
       if (hasError) {
         const errorText = await this.getText(this.selectors.giftCardError);
-        logger.error('Gift card error', { error: errorText });
+        logger.error('Gift card rejected', { error: errorText });
         return false;
       }
 
       logger.info('Gift card applied successfully');
       return true;
     } catch (error) {
-      logger.error('Failed to apply gift card', { error });
+      // Sanitize error - don't include potentially sensitive details
+      logger.error('Failed to apply gift card', { error: String(error).substring(0, 100) });
       return false;
     }
   }
@@ -151,13 +172,21 @@ export class PaymentPage extends BasePage {
       await payBtn.waitFor({ state: 'visible', timeout: 5000 });
       await payBtn.click();
 
-      // Wait for confirmation or error
-      await this.delay(5000);
+      // Wait for either confirmation or error to appear (not a fixed delay)
+      try {
+        await Promise.race([
+          this.page.waitForSelector(this.selectors.bookingConfirmation, { timeout: 30000 }),
+          this.page.waitForSelector(this.selectors.errorMessage, { timeout: 30000 }),
+        ]);
+      } catch {
+        // Timeout - neither confirmation nor error appeared
+        logger.warn('Payment response timeout');
+      }
 
       // Check for success
       const hasConfirmation = await this.isVisible(
         this.selectors.bookingConfirmation,
-        10000
+        2000
       );
 
       if (hasConfirmation) {
@@ -182,7 +211,7 @@ export class PaymentPage extends BasePage {
         screenshotPath: await this.screenshot('payment-error'),
       };
     } catch (error) {
-      logger.error('Payment error', { error });
+      logger.error('Payment error', { error: String(error) });
       return {
         success: false,
         error: String(error),
