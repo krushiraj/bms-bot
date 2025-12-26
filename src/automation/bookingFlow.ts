@@ -1,5 +1,5 @@
 import { Browser, BrowserContext, Page } from 'playwright';
-import { launchBrowser, createContext, createPage, closeBrowser, takeScreenshot } from './browser.js';
+import { launchBrowser, createContext, createPage, takeScreenshot } from './browser.js';
 import { HomePage } from './pages/HomePage.js';
 import { ShowtimesPage } from './pages/ShowtimesPage.js';
 import { SeatPage } from './pages/SeatPage.js';
@@ -44,10 +44,18 @@ export class BookingFlow {
 
   async cleanup(): Promise<void> {
     try {
-      if (this.context) {
-        await this.context.close();
+      if (this.page) {
+        await this.page.close().catch(() => {});
+        this.page = null;
       }
-      await closeBrowser();
+      if (this.context) {
+        await this.context.close().catch(() => {});
+        this.context = null;
+      }
+      if (this.browser) {
+        await this.browser.close().catch(() => {});
+        this.browser = null;
+      }
       logger.info('Booking flow cleaned up');
     } catch (error) {
       logger.error('Failed to cleanup booking flow', { error: String(error) });
@@ -162,9 +170,15 @@ export class BookingFlow {
       };
     } catch (error) {
       logger.error('Booking attempt failed', { error: String(error) });
-      const screenshotPath = this.page
-        ? await takeScreenshot(this.page, 'booking-error')
-        : undefined;
+
+      let screenshotPath: string | undefined;
+      if (this.page) {
+        try {
+          screenshotPath = await takeScreenshot(this.page, 'booking-error');
+        } catch (screenshotError) {
+          logger.warn('Failed to take error screenshot', { error: String(screenshotError) });
+        }
+      }
 
       return {
         success: false,
