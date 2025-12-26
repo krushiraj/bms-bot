@@ -21,26 +21,41 @@ export abstract class BasePage {
   }
 
   async click(selector: string, options?: { timeout?: number }): Promise<void> {
-    const timeout = options?.timeout ?? 10000;
-    await this.page.click(selector, { timeout });
-    logger.debug(`Clicked: ${selector}`);
+    try {
+      const timeout = options?.timeout ?? 10000;
+      await this.page.click(selector, { timeout });
+      logger.debug(`Clicked: ${selector}`);
+    } catch (error) {
+      logger.error(`Failed to click: ${selector}`, { error });
+      throw error;
+    }
   }
 
   async clickAndWait(selector: string): Promise<void> {
     await Promise.all([
-      this.page.waitForLoadState('domcontentloaded'),
+      this.page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
       this.page.click(selector),
     ]);
   }
 
   async fill(selector: string, value: string): Promise<void> {
-    await this.page.fill(selector, value);
-    logger.debug(`Filled: ${selector}`);
+    try {
+      await this.page.fill(selector, value);
+      logger.debug(`Filled: ${selector}`);
+    } catch (error) {
+      logger.error(`Failed to fill: ${selector}`, { error });
+      throw error;
+    }
   }
 
   async getText(selector: string): Promise<string> {
-    const element = await this.page.waitForSelector(selector);
-    return (await element?.textContent()) ?? '';
+    try {
+      const element = await this.page.waitForSelector(selector);
+      return (await element?.textContent()) ?? '';
+    } catch (error) {
+      logger.warn(`Element not found for getText: ${selector}`);
+      return '';
+    }
   }
 
   async isVisible(selector: string, timeout = 5000): Promise<boolean> {
@@ -58,8 +73,9 @@ export abstract class BasePage {
   ): Promise<Locator> {
     const timeout = options?.timeout ?? 10000;
     const state = options?.state ?? 'visible';
-    await this.page.waitForSelector(selector, { timeout, state });
-    return this.page.locator(selector);
+    const locator = this.page.locator(selector);
+    await locator.waitFor({ timeout, state });
+    return locator;
   }
 
   async screenshot(suffix = ''): Promise<string> {
