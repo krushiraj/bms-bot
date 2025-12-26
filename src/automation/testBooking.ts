@@ -90,6 +90,9 @@ process.on('SIGTERM', async () => {
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    logger.error('Unhandled error in main', { error: String(error) });
+    logger.error('Unhandled error in main', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     process.exit(1);
   });
