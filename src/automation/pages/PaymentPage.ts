@@ -49,13 +49,17 @@ export class PaymentPage extends BasePage {
     try {
       logger.info('Filling contact details');
 
-      // Basic validation
+      // Email validation - return false if invalid
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        logger.warn('Invalid email format', { email: email.substring(0, 3) + '***' });
+        logger.error('Invalid email format');
+        return false;
       }
 
-      if (phone && !/^\d{10,15}$/.test(phone.replace(/\D/g, ''))) {
-        logger.warn('Invalid phone format');
+      // Phone validation - return false if invalid
+      const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
+      if (phone && !/^\d{10,15}$/.test(phoneDigits)) {
+        logger.error('Invalid phone format');
+        return false;
       }
 
       const emailInput = this.page.locator(this.selectors.emailInput).first();
