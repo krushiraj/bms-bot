@@ -13,7 +13,7 @@ export class SeatPage extends BasePage {
   private selectedSeats: Seat[] = [];
 
   private selectors = {
-    seatMap: '.seat-layout, [data-testid="seat-layout"]',
+    seatMap: '.seat-layout, [data-testid="seat-layout"], svg, .seatlayout',
     seatRow: '.seat-row, [data-testid="seat-row"]',
     seat: '.seat, [data-testid="seat"]',
     seatAvailable: '.seat--available, [data-testid="seat-available"]',
@@ -31,10 +31,10 @@ export class SeatPage extends BasePage {
 
   async waitForSeatMap(): Promise<boolean> {
     try {
-      await this.page.waitForSelector('.seat-layout, svg, .seatlayout', {
+      await this.page.waitForSelector(this.selectors.seatMap, {
         timeout: 15000,
       });
-      await this.delay(1000); // Let seats render
+      await this.delay(1000);
       return true;
     } catch (error) {
       logger.warn('Seat map not loaded', { error });
@@ -126,6 +126,14 @@ export class SeatPage extends BasePage {
         };
       });
 
+      // Validate the layout structure
+      if (!layout.rows || !Array.isArray(layout.rows) ||
+          typeof layout.totalRows !== 'number' ||
+          typeof layout.maxSeatsPerRow !== 'number') {
+        logger.error('Invalid layout structure from DOM');
+        return null;
+      }
+
       if (layout.rows.length === 0) {
         logger.warn('No seats found in layout');
         return null;
@@ -146,8 +154,15 @@ export class SeatPage extends BasePage {
 
   async selectOptimalSeats(prefs: SeatPrefs): Promise<SeatGroup | null> {
     try {
+      // Validate preferences
+      if (prefs.count <= 0) {
+        logger.error('Invalid seat count', { count: prefs.count });
+        return null;
+      }
+
       const layout = await this.parseSeatLayout();
-      if (!layout) {
+      if (!layout || layout.rows.length === 0) {
+        logger.warn('No seat layout available');
         return null;
       }
 
@@ -162,12 +177,22 @@ export class SeatPage extends BasePage {
         score: bestGroup.avgScore.toFixed(2),
       });
 
-      // Click each seat
+      // Click each seat and verify success
+      const actuallySelected: Seat[] = [];
       for (const seat of bestGroup.seats) {
-        await this.clickSeat(seat.id);
+        const success = await this.clickSeat(seat.id);
+        if (success) {
+          actuallySelected.push(seat);
+        } else {
+          logger.warn('Failed to select seat, aborting', {
+            seatId: seat.id,
+            selected: actuallySelected.length
+          });
+          return null;
+        }
       }
 
-      this.selectedSeats = bestGroup.seats;
+      this.selectedSeats = actuallySelected;
       return bestGroup;
     } catch (error) {
       logger.error('Failed to select optimal seats', { error });
@@ -177,7 +202,15 @@ export class SeatPage extends BasePage {
 
   async clickSeat(seatId: string): Promise<boolean> {
     try {
-      const [row, seatNum] = seatId.split('-');
+      const parts = seatId.split('-');
+      const row = parts[0];
+      const seatNum = parts[1];
+
+      if (!row || !seatNum) {
+        logger.error('Invalid seat ID format', { seatId });
+        return false;
+      }
+
       const selectors = [
         `[data-seat-id="${seatId}"]`,
         `[data-id="${seatId}"]`,
