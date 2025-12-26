@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { config } from './utils/config.js';
 import { logger } from './utils/logger.js';
 import { connectDatabase, disconnectDatabase } from './db/client.js';

@@ -16,12 +16,18 @@
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["bookmyshow", "automation", "telegram-bot", "playwright"],
+  "keywords": [
+    "bookmyshow",
+    "automation",
+    "telegram-bot",
+    "playwright"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^5.7.0",
     "bullmq": "^5.1.0",
+    "dotenv": "^17.2.3",
     "fastify": "^4.25.0",
     "grammy": "^1.21.0",
     "ioredis": "^5.3.2",
