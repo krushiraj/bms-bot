@@ -71,6 +71,107 @@ export function dateKeyboard(selectedDates: string[] = []): InlineKeyboard {
   return kb;
 }
 
+export const FORMATS = ['2D', '3D', 'IMAX', '4DX'];
+
+export function formatKeyboard(selectedFormats: string[] = []): InlineKeyboard {
+  const kb = new InlineKeyboard();
+
+  // Row 1: 2D, 3D
+  for (const format of FORMATS.slice(0, 2)) {
+    const isSelected = selectedFormats.includes(format);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${format}`, `format:toggle:${format}`);
+  }
+  kb.row();
+
+  // Row 2: IMAX, 4DX
+  for (const format of FORMATS.slice(2)) {
+    const isSelected = selectedFormats.includes(format);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${format}`, `format:toggle:${format}`);
+  }
+  kb.row();
+
+  kb.text('Any Format', 'format:any')
+    .row()
+    .text('Done', 'format:done')
+    .row()
+    .text('Back', 'job:back:dates')
+    .text('Cancel', 'menu:main');
+
+  return kb;
+}
+
+export const LANGUAGES = ['Hindi', 'English', 'Telugu', 'Tamil', 'Kannada', 'Malayalam'];
+
+export function languageKeyboard(selectedLanguages: string[] = []): InlineKeyboard {
+  const kb = new InlineKeyboard();
+
+  // Row 1: Hindi, English, Telugu
+  for (const lang of LANGUAGES.slice(0, 3)) {
+    const isSelected = selectedLanguages.includes(lang);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${lang}`, `lang:toggle:${lang}`);
+  }
+  kb.row();
+
+  // Row 2: Tamil, Kannada, Malayalam
+  for (const lang of LANGUAGES.slice(3)) {
+    const isSelected = selectedLanguages.includes(lang);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${lang}`, `lang:toggle:${lang}`);
+  }
+  kb.row();
+
+  kb.text('Any Language', 'lang:any')
+    .row()
+    .text('Done', 'lang:done')
+    .row()
+    .text('Back', 'job:back:format')
+    .text('Cancel', 'menu:main');
+
+  return kb;
+}
+
+export const SCREENS = ['IMAX', 'PCX', 'DOLBY', 'LASER', 'BARCO', 'ICE', 'ONYX', '4DX'];
+
+export function screenKeyboard(selectedScreens: string[] = []): InlineKeyboard {
+  const kb = new InlineKeyboard();
+
+  // Row 1: IMAX, PCX, DOLBY
+  for (const screen of SCREENS.slice(0, 3)) {
+    const isSelected = selectedScreens.includes(screen);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${screen}`, `screen:toggle:${screen}`);
+  }
+  kb.row();
+
+  // Row 2: LASER, BARCO, ICE
+  for (const screen of SCREENS.slice(3, 6)) {
+    const isSelected = selectedScreens.includes(screen);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${screen}`, `screen:toggle:${screen}`);
+  }
+  kb.row();
+
+  // Row 3: ONYX, 4DX
+  for (const screen of SCREENS.slice(6)) {
+    const isSelected = selectedScreens.includes(screen);
+    const prefix = isSelected ? '✓ ' : '';
+    kb.text(`${prefix}${screen}`, `screen:toggle:${screen}`);
+  }
+  kb.row();
+
+  kb.text('Any Screen', 'screen:any')
+    .row()
+    .text('Done', 'screen:done')
+    .row()
+    .text('Back', 'job:back:lang')
+    .text('Cancel', 'menu:main');
+
+  return kb;
+}
+
 export function jobListKeyboard(jobs: Array<{ id: string; movieName: string; status: string }>): InlineKeyboard {
   const kb = new InlineKeyboard();
   const statusEmoji: Record<string, string> = {
