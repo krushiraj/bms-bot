@@ -113,8 +113,124 @@ bot.command('menu', async (ctx) => {
   await showMainMenu(ctx);
 });
 
-// Handle messages for interactive job creation
+// Handle messages for interactive flows
 bot.on('message:text', async (ctx, next) => {
+  const step = ctx.session.step;
+  const text = ctx.message.text?.trim();
+  const telegramId = ctx.from?.id.toString();
+
+  if (!text || !telegramId) {
+    await next();
+    return;
+  }
+
+  // Card add flow
+  if (step === 'card_add') {
+    const parts = text.split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply('Please provide both card number and PIN separated by space.');
+      return;
+    }
+
+    const [cardNumber, pin] = parts;
+    if (!cardNumber || !pin) {
+      await ctx.reply('Please provide both card number and PIN.');
+      return;
+    }
+
+    if (cardNumber.length < 10 || cardNumber.length > 20) {
+      await ctx.reply('Invalid card number format.');
+      return;
+    }
+
+    if (pin.length < 4 || pin.length > 8) {
+      await ctx.reply('PIN must be 4-8 digits.');
+      return;
+    }
+
+    try {
+      const user = await userService.getOrCreate(telegramId);
+      await giftCardService.addCard(user.id, cardNumber, pin);
+
+      // Delete message for security
+      try {
+        await ctx.deleteMessage();
+      } catch {
+        // May fail if bot doesn't have delete permission
+      }
+
+      ctx.session.step = undefined;
+
+      const { InlineKeyboard } = await import('grammy');
+      const kb = new InlineKeyboard()
+        .text('My Cards', 'menu:cards')
+        .text('Main Menu', 'menu:main');
+
+      await ctx.reply(
+        `*Card Added!*\n\nCard ****${cardNumber.slice(-4)} has been saved securely.`,
+        { parse_mode: 'Markdown', reply_markup: kb }
+      );
+    } catch (error) {
+      logger.error('Error adding card', { error });
+      await ctx.reply('Failed to add card. Please try again.');
+    }
+    return;
+  }
+
+  // Contact update flow
+  if (step === 'contact_update') {
+    const parts = text.split(/\s+/);
+    if (parts.length < 2) {
+      await ctx.reply('Please provide both email and phone separated by space.');
+      return;
+    }
+
+    const [email, phone] = parts;
+    if (!email || !phone) {
+      await ctx.reply('Please provide both email and phone.');
+      return;
+    }
+
+    if (!email.includes('@') || !email.includes('.')) {
+      await ctx.reply('Please enter a valid email address.');
+      return;
+    }
+
+    if (!/^\d{10}$/.test(phone)) {
+      await ctx.reply('Please enter a valid 10-digit phone number.');
+      return;
+    }
+
+    try {
+      const user = await userService.getOrCreate(telegramId);
+      await userService.updateContactInfo(user.id, { email, phone });
+
+      // Delete message for privacy
+      try {
+        await ctx.deleteMessage();
+      } catch {
+        // May fail if bot doesn't have delete permission
+      }
+
+      ctx.session.step = undefined;
+
+      const { InlineKeyboard } = await import('grammy');
+      const kb = new InlineKeyboard()
+        .text('Settings', 'settings:main')
+        .text('Main Menu', 'menu:main');
+
+      await ctx.reply(
+        `*Contact Updated!*\n\nEmail: ${email}\nPhone: ****${phone.slice(-4)}`,
+        { parse_mode: 'Markdown', reply_markup: kb }
+      );
+    } catch (error) {
+      logger.error('Error updating contact', { error });
+      await ctx.reply('Failed to update contact. Please try again.');
+    }
+    return;
+  }
+
+  // Existing job message handler
   const handled = await handleJobMessage(ctx);
   if (!handled) {
     await next();
