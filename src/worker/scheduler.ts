@@ -1,4 +1,5 @@
 import { jobService } from './jobService.js';
+import { notificationService } from './notificationService.js';
 import { watchQueue } from './queues.js';
 import { logger } from '../utils/logger.js';
 
@@ -90,6 +91,50 @@ async function expireOldJobs(): Promise<void> {
 }
 
 /**
+ * Check for jobs awaiting input that have timed out (15 minutes)
+ * Pause them and notify the user
+ */
+async function checkAwaitingInputTimeouts(): Promise<void> {
+  try {
+    const timedOutJobs = await jobService.getTimedOutAwaitingJobs();
+
+    for (const job of timedOutJobs) {
+      // Pause the job
+      await jobService.pauseJob(job.id);
+
+      // Notify user
+      if (job.lastScreenshotPath) {
+        await notificationService.notifyWithScreenshot(
+          job.user.telegramId,
+          {
+            type: 'job_paused',
+            jobId: job.id,
+            movieName: job.movieName,
+            error: 'No response to preference mismatch notification',
+          },
+          job.lastScreenshotPath
+        );
+      } else {
+        await notificationService.notify(job.user.telegramId, {
+          type: 'job_paused',
+          jobId: job.id,
+          movieName: job.movieName,
+          error: 'No response to preference mismatch notification',
+        });
+      }
+
+      logger.info('Job paused due to timeout', { jobId: job.id });
+    }
+
+    if (timedOutJobs.length > 0) {
+      logger.info('Paused timed-out jobs', { count: timedOutJobs.length });
+    }
+  } catch (error) {
+    logger.error('Failed to check awaiting input timeouts', { error: String(error) });
+  }
+}
+
+/**
  * Clean up stale queue tracking entries
  */
 function cleanupQueueTracking(): void {
@@ -114,6 +159,9 @@ async function schedulerTick(): Promise<void> {
 
     // Expire old jobs first
     await expireOldJobs();
+
+    // Check for timed-out awaiting input jobs
+    await checkAwaitingInputTimeouts();
 
     // Enqueue ready jobs
     await enqueueReadyJobs();
