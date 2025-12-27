@@ -226,11 +226,11 @@ export async function myJobsCommand(ctx: CommandContext<Context>): Promise<void>
       return;
     }
 
-    const jobs = await jobService.getJobsByUser(user.id);
+    const jobs = await jobService.getActiveJobsByUser(user.id);
 
     if (jobs.length === 0) {
       await ctx.reply(
-        'You don\'t have any booking jobs yet.\n\n' +
+        'You don\'t have any active booking jobs.\n\n' +
         'Use /newjob to create one.'
       );
       return;
