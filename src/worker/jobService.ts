@@ -12,6 +12,9 @@ export interface CreateJobInput {
   showtimePrefs: {
     preferredDates?: string[];
     preferredTimes?: string[];
+    preferredFormats?: string[];
+    preferredLanguages?: string[];
+    preferredScreens?: string[];
   };
   seatPrefs: {
     count: number;

@@ -642,6 +642,9 @@ export async function handleSeatsCallback(ctx: MyContext): Promise<void> {
       showtimePrefs: {
         preferredDates: draft.preferredDates,
         preferredTimes: draft.preferredTimes,
+        preferredFormats: draft.preferredFormats,
+        preferredLanguages: draft.preferredLanguages,
+        preferredScreens: draft.preferredScreens,
       },
       seatPrefs: {
         count: seatCount,
@@ -678,6 +681,9 @@ export async function handleSeatsCallback(ctx: MyContext): Promise<void> {
       `City: ${draft.city}\n` +
       `Theatre(s): ${draft.theatres?.join(', ')}\n` +
       `Date(s): ${draft.preferredDates?.join(', ') || 'Any'}\n` +
+      `Format: ${draft.preferredFormats?.join(', ') || 'Any'}\n` +
+      `Language: ${draft.preferredLanguages?.join(', ') || 'Any'}\n` +
+      `Screen: ${draft.preferredScreens?.join(', ') || 'Any'}\n` +
       `Time(s): ${draft.preferredTimes?.join(', ') || 'Any'}\n` +
       `Seats: ${seatCount}\n` +
       `Watch Until: ${watchUntilStr}\n\n` +
