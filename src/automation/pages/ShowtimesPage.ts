@@ -162,6 +162,83 @@ export class ShowtimesPage extends BasePage {
     super(page, 'ShowtimesPage');
   }
 
+  private async isTheatreVisible(theatreName: string): Promise<boolean> {
+    const theatreRow = this.page.locator('.ReactVirtualized__Grid').locator(`text=${theatreName}`).first();
+    return theatreRow.isVisible().catch(() => false);
+  }
+
+  private async filterTheatres(theatreName: string): Promise<boolean> {
+    try {
+      const filterSelectors = [
+        'input[placeholder*="Filter"]',
+        'input[placeholder*="Search"]',
+        'input[placeholder*="filter"]',
+        'input[placeholder*="search"]',
+        '[data-testid="theatre-filter"]',
+      ];
+
+      for (const selector of filterSelectors) {
+        const filterInput = this.page.locator(selector).first();
+        if (await filterInput.isVisible().catch(() => false)) {
+          await filterInput.fill(theatreName);
+          await this.page.waitForTimeout(1000);
+          logger.info('Filtered theatres', { theatreName });
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      logger.debug('Filter theatres failed', { error: String(error) });
+      return false;
+    }
+  }
+
+  private async scrollToFindTheatre(theatreName: string, maxScrolls = 3): Promise<boolean> {
+    try {
+      const venueList = this.page.locator('.ReactVirtualized__Grid').first();
+
+      for (let i = 0; i < maxScrolls; i++) {
+        if (await this.isTheatreVisible(theatreName)) {
+          logger.info('Theatre found after scroll', { theatreName, scrollAttempt: i });
+          return true;
+        }
+        await venueList.evaluate((el) => { el.scrollTop += 500; });
+        await this.page.waitForTimeout(500);
+      }
+      return false;
+    } catch (error) {
+      logger.debug('Scroll to find theatre failed', { error: String(error) });
+      return false;
+    }
+  }
+
+  async findTheatre(theatreName: string): Promise<boolean> {
+    logger.info('Finding theatre', { theatreName });
+
+    // Strategy 1: Check if already visible
+    if (await this.isTheatreVisible(theatreName)) {
+      logger.info('Theatre already visible', { theatreName });
+      return true;
+    }
+
+    // Strategy 2: Try filter/search box
+    const filtered = await this.filterTheatres(theatreName);
+    if (filtered) {
+      await this.page.waitForTimeout(500);
+      if (await this.isTheatreVisible(theatreName)) {
+        return true;
+      }
+    }
+
+    // Strategy 3: Scroll through the list
+    if (await this.scrollToFindTheatre(theatreName)) {
+      return true;
+    }
+
+    logger.warn('Theatre not found after all strategies', { theatreName });
+    return false;
+  }
+
   async waitForShowtimes(): Promise<boolean> {
     try {
       // Try multiple selectors for venue list
@@ -336,6 +413,13 @@ export class ShowtimesPage extends BasePage {
   ): Promise<boolean> {
     try {
       logger.info('Looking for theatre', { theatreName, preferredTimes, prefs });
+
+      // First, ensure the theatre is visible
+      const found = await this.findTheatre(theatreName);
+      if (!found) {
+        logger.warn('Theatre not found', { theatreName });
+        return false;
+      }
 
       // Wait for the virtualized list to render
       await this.page.waitForTimeout(2000);
