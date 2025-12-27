@@ -118,7 +118,14 @@ export class JobService {
       where: {
         userId,
         status: {
-          in: [JobStatus.PENDING, JobStatus.WATCHING, JobStatus.BOOKING, JobStatus.AWAITING_CONSENT],
+          in: [
+            JobStatus.PENDING,
+            JobStatus.WATCHING,
+            JobStatus.BOOKING,
+            JobStatus.AWAITING_CONSENT,
+            JobStatus.AWAITING_INPUT,
+            JobStatus.PAUSED,
+          ],
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -306,6 +313,166 @@ export class JobService {
       failed: jobs.filter(j => j.status === JobStatus.FAILED || j.status === JobStatus.CANCELLED)
         .length,
     };
+  }
+
+  /**
+   * Set job to awaiting input state with available options
+   */
+  async setAwaitingInput(
+    jobId: string,
+    mismatchType: string,
+    availableOptions: object,
+    screenshotPath?: string
+  ): Promise<BookingJob> {
+    try {
+      const job = await prisma.bookingJob.update({
+        where: { id: jobId },
+        data: {
+          status: JobStatus.AWAITING_INPUT,
+          awaitingInputSince: new Date(),
+          mismatchType,
+          availableOptions: availableOptions as Prisma.JsonObject,
+          lastScreenshotPath: screenshotPath,
+        },
+      });
+
+      logger.info('Job set to awaiting input', {
+        jobId,
+        mismatchType,
+      });
+
+      return job;
+    } catch (error) {
+      logger.error('Failed to set job awaiting input', {
+        jobId,
+        error: String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Resume job from awaiting input or paused state
+   */
+  async resumeJob(jobId: string): Promise<BookingJob> {
+    try {
+      const job = await prisma.bookingJob.update({
+        where: { id: jobId },
+        data: {
+          status: JobStatus.WATCHING,
+          awaitingInputSince: null,
+          mismatchType: null,
+          availableOptions: Prisma.DbNull,
+        },
+      });
+
+      logger.info('Job resumed', { jobId });
+      return job;
+    } catch (error) {
+      logger.error('Failed to resume job', {
+        jobId,
+        error: String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Pause job after timeout
+   */
+  async pauseJob(jobId: string): Promise<BookingJob> {
+    return this.updateJobStatus(jobId, JobStatus.PAUSED);
+  }
+
+  /**
+   * Update job preferences (when user selects from available options)
+   */
+  async updateJobPreferences(
+    jobId: string,
+    newPrefs: {
+      preferredFormats?: string[];
+      preferredLanguages?: string[];
+      preferredScreens?: string[];
+      preferredTimes?: string[];
+    }
+  ): Promise<BookingJob> {
+    try {
+      const job = await prisma.bookingJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job) {
+        throw new Error('Job not found');
+      }
+
+      const currentPrefs = job.showtimePrefs as Record<string, unknown>;
+      const updatedPrefs = {
+        ...currentPrefs,
+        ...newPrefs,
+      };
+
+      const updated = await prisma.bookingJob.update({
+        where: { id: jobId },
+        data: {
+          showtimePrefs: updatedPrefs as Prisma.JsonObject,
+          status: JobStatus.WATCHING,
+          awaitingInputSince: null,
+          mismatchType: null,
+          availableOptions: Prisma.DbNull,
+        },
+      });
+
+      logger.info('Job preferences updated', { jobId, newPrefs });
+      return updated;
+    } catch (error) {
+      logger.error('Failed to update job preferences', {
+        jobId,
+        error: String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get jobs awaiting input that have timed out (15 minutes)
+   */
+  async getTimedOutAwaitingJobs(): Promise<JobWithUser[]> {
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+    return prisma.bookingJob.findMany({
+      where: {
+        status: JobStatus.AWAITING_INPUT,
+        awaitingInputSince: { lt: fifteenMinutesAgo },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            telegramId: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Get job with available options
+   */
+  async getJobWithOptions(jobId: string): Promise<(BookingJob & { parsedOptions?: object }) | null> {
+    const job = await prisma.bookingJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (job && job.availableOptions) {
+      return {
+        ...job,
+        parsedOptions: job.availableOptions as object,
+      };
+    }
+
+    return job;
   }
 }
 
