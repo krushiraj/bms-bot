@@ -60,6 +60,12 @@ model BookingJob {
   // Result
   bookingResult Json?
 
+  // Mismatch handling
+  awaitingInputSince DateTime?      // When mismatch was detected
+  availableOptions   Json?          // Scraped available showtimes
+  mismatchType       String?        // format|language|screen|time|theatre
+  lastScreenshotPath String?        // Path to latest screenshot
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -74,6 +80,8 @@ enum JobStatus {
   WATCHING
   BOOKING
   AWAITING_CONSENT
+  AWAITING_INPUT    // Waiting for user response to mismatch
+  PAUSED            // User didn't respond in 15 minutes
   SUCCESS
   FAILED
   CANCELLED
