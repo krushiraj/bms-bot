@@ -116,7 +116,13 @@ export async function showJobDetail(ctx: MyContext, jobId: string): Promise<void
     AWAITING_CONSENT: '❓',
   };
 
-  const prefs = job.showtimePrefs as { preferredDates?: string[]; preferredTimes?: string[] };
+  const prefs = job.showtimePrefs as {
+    preferredDates?: string[];
+    preferredTimes?: string[];
+    preferredFormats?: string[];
+    preferredLanguages?: string[];
+    preferredScreens?: string[];
+  };
   const seatPrefs = job.seatPrefs as { count?: number };
   const emoji = statusEmoji[job.status] || '❓';
 
@@ -125,11 +131,24 @@ export async function showJobDetail(ctx: MyContext, jobId: string): Promise<void
     timeStyle: 'short',
   });
 
-  const text = `*Job Details*\n\n` +
+  let text = `*Job Details*\n\n` +
     `*${job.movieName}*\n` +
     `${job.city} - ${job.theatres.join(', ')}\n` +
-    `${prefs.preferredDates?.join(', ') || 'Any'} | ${prefs.preferredTimes?.[0] || 'Any'}\n` +
-    `${seatPrefs.count || 2} seats\n` +
+    `Date: ${prefs.preferredDates?.join(', ') || 'Any'}\n` +
+    `Time: ${prefs.preferredTimes?.[0] || 'Any'}\n`;
+
+  // Add format, language, screen if set
+  if (prefs.preferredFormats?.length) {
+    text += `Format: ${prefs.preferredFormats.join(', ')}\n`;
+  }
+  if (prefs.preferredLanguages?.length) {
+    text += `Language: ${prefs.preferredLanguages.join(', ')}\n`;
+  }
+  if (prefs.preferredScreens?.length) {
+    text += `Screen: ${prefs.preferredScreens.join(', ')} _(preferred)_\n`;
+  }
+
+  text += `Seats: ${seatPrefs.count || 2}\n` +
     `${emoji} Status: ${job.status}\n\n` +
     `Watch until: ${watchUntil}`;
 
