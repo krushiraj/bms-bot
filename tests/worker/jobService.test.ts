@@ -138,7 +138,7 @@ describe('JobService', () => {
         where: {
           userId: 'user-123',
           status: {
-            in: [JobStatus.PENDING, JobStatus.WATCHING, JobStatus.BOOKING, JobStatus.AWAITING_CONSENT],
+            in: [JobStatus.PENDING, JobStatus.WATCHING, JobStatus.BOOKING, JobStatus.AWAITING_CONSENT, JobStatus.AWAITING_INPUT, JobStatus.PAUSED],
           },
         },
         orderBy: { createdAt: 'desc' },
