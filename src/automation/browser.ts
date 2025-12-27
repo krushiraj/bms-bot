@@ -10,7 +10,7 @@ export interface BrowserOptions {
 }
 
 const DEFAULT_OPTIONS: BrowserOptions = {
-  headless: true,
+  headless: false, // BMS detects headless browsers
   slowMo: 50,
   viewport: { width: 1920, height: 1080 },
 };

@@ -39,6 +39,16 @@ export class UserService {
     });
     return Boolean(user?.email && user?.phone);
   }
+
+  async updateNotificationPreference(
+    telegramId: string,
+    notifyOnlySuccess: boolean
+  ): Promise<User> {
+    return prisma.user.update({
+      where: { telegramId },
+      data: { notifyOnlySuccess },
+    });
+  }
 }
 
 export const userService = new UserService();

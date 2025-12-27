@@ -53,17 +53,52 @@ export class BookingFlow {
       const html = await this.page.content();
       await fs.promises.writeFile(htmlPath, html);
 
-      // Save URL
-      const url = this.page.url();
-      logger.info(`Debug saved: ${step}`, { url, screenshot: screenshotPath, html: htmlPath });
+      // Save element counts for debugging
+      const debugInfo: Record<string, any> = {
+        url: this.page.url(),
+        timestamp: new Date().toISOString(),
+        step,
+      };
+
+      // Key selectors to check
+      const selectors = [
+        { name: 'venueList', selector: '[class*="venue"]' },
+        { name: 'cinemaList', selector: '[class*="cinema"]' },
+        { name: 'showtimeList', selector: '[class*="showtime"]' },
+        { name: 'virtualizedGrid', selector: '.ReactVirtualized__Grid' },
+        { name: 'seatMap', selector: '[class*="seat"]' },
+        { name: 'paymentOptions', selector: '[class*="payment"]' },
+        { name: 'giftCard', selector: '[class*="gift"]' },
+        { name: 'errorMessage', selector: '[class*="error"], [class*="Error"]' },
+        { name: 'buttons', selector: 'button' },
+        { name: 'datePill', selector: '[id^="2025"], [id^="2026"]' },
+      ];
+
+      for (const { name, selector } of selectors) {
+        const count = await this.page.locator(selector).count().catch(() => 0);
+        debugInfo[name] = { count };
+      }
+
+      // Save JSON debug info
+      const jsonPath = path.join(this.debugDir, `${baseFileName}.json`);
+      await fs.promises.writeFile(jsonPath, JSON.stringify(debugInfo, null, 2));
+
+      logger.info(`Debug saved: ${step}`, {
+        url: debugInfo.url,
+        screenshot: screenshotPath,
+        html: htmlPath,
+        json: jsonPath
+      });
     } catch (error) {
       logger.warn('Failed to save debug info', { step, error: String(error) });
     }
   }
 
-  async initialize(headless = true): Promise<void> {
+  async initialize(headless?: boolean): Promise<void> {
     try {
-      this.browser = await launchBrowser({ headless });
+      // If headless not specified, use browser.ts default (non-headless)
+      const options = headless !== undefined ? { headless } : {};
+      this.browser = await launchBrowser(options);
       this.context = await createContext(this.browser);
       this.page = await createPage(this.context);
       logger.info('Booking flow initialized');
@@ -163,7 +198,10 @@ export class BookingFlow {
         showtimeSelected = await showtimesPage.clickFirstAvailableShowtime();
       }
 
+      await this.saveDebugInfo('06c-after-showtime-selection');
+
       if (!showtimeSelected) {
+        await this.saveDebugInfo('error-no-suitable-showtime');
         return { success: false, error: 'No suitable showtime found' };
       }
 
@@ -184,14 +222,24 @@ export class BookingFlow {
         return { success: false, error: 'Seat map not loaded' };
       }
 
+      await this.saveDebugInfo('07b-seat-map-loaded');
+
       const selectedGroup = await seatPage.selectOptimalSeats(config.seatPrefs);
+      await this.saveDebugInfo('07c-after-seat-selection');
+
       if (!selectedGroup) {
+        await this.saveDebugInfo('error-no-suitable-seats');
         return {
           success: false,
           error: 'No suitable seats available',
           screenshotPath: await takeScreenshot(this.page, 'no-seats'),
         };
       }
+
+      logger.info('Seats selected', {
+        seats: selectedGroup.seats.map(s => s.id),
+        avgScore: selectedGroup.avgScore,
+      });
 
       // Check if seats meet minimum score
       if (selectedGroup.avgScore < 0.4) {
@@ -200,25 +248,35 @@ export class BookingFlow {
       }
 
       const proceeded = await seatPage.proceedToPayment();
+      await this.saveDebugInfo('07d-after-proceed-to-payment');
+
       if (!proceeded) {
+        await this.saveDebugInfo('error-proceed-to-payment-failed');
         return { success: false, error: 'Could not proceed to payment' };
       }
 
       // Step 4: Complete payment
       const paymentPage = new PaymentPage(this.page);
       const paymentLoaded = await paymentPage.waitForPaymentPage();
+      await this.saveDebugInfo('08-payment-page');
+
       if (!paymentLoaded) {
+        await this.saveDebugInfo('error-payment-page-not-loaded');
         return { success: false, error: 'Payment page not loaded' };
       }
 
       // Fill contact info
       const contactFilled = await paymentPage.fillContactDetails(config.userEmail, config.userPhone);
+      await this.saveDebugInfo('08b-after-contact-filled');
+
       if (!contactFilled) {
+        await this.saveDebugInfo('error-invalid-contact');
         return { success: false, error: 'Invalid contact details' };
       }
 
       // Submit contact form to reach payment options page
       const bookingResult = await paymentPage.completePayment();
+      await this.saveDebugInfo('09-after-complete-payment');
 
       // If we reached payment options page successfully, try applying gift cards
       if (bookingResult.success && config.giftCards.length > 0) {

@@ -136,7 +136,7 @@ export class ShowtimesPage extends BasePage {
    * Select date by day number (e.g., "28" for 28th)
    * Works with BMS date selector which shows day numbers
    */
-  async selectDateByDay(day: string): Promise<void> {
+  async selectDateByDay(day: string): Promise<boolean> {
     try {
       logger.info('Selecting date by day', { day });
 
@@ -161,7 +161,8 @@ export class ShowtimesPage extends BasePage {
           logger.info('Found date pill', { id, day });
           await pill.click();
           await this.delay(1000); // Wait for page to update
-          return;
+          logger.info('Date selected successfully', { id, day });
+          return true;
         }
       }
 
@@ -171,13 +172,15 @@ export class ShowtimesPage extends BasePage {
         await dayDiv.click();
         await this.delay(1000);
         logger.info('Clicked day number directly', { day });
-        return;
+        return true;
       }
 
       logger.warn('Date not found, using current date', { day });
+      return false;
     } catch (error) {
       logger.error('Failed to select date by day', { day, error });
       // Don't throw - just continue with default date
+      return false;
     }
   }
 

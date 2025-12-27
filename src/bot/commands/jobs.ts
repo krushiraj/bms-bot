@@ -114,9 +114,46 @@ export async function quickJobCommand(ctx: CommandContext<Context>): Promise<voi
   try {
     const user = await userService.getOrCreate(telegramId);
 
-    // Calculate watch window (now to 7 days from now)
+    // Calculate watch window based on preferred date and time
     const now = new Date();
-    const watchUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    let watchUntil: Date;
+
+    // Parse the preferred date (e.g., "27" or "2025-12-27")
+    const preferredDate = date.includes('-') ? new Date(date) : (() => {
+      const d = new Date();
+      const day = parseInt(date, 10);
+      d.setDate(day);
+      // If the day is in the past, assume next month
+      if (d < now) {
+        d.setMonth(d.getMonth() + 1);
+      }
+      return d;
+    })();
+
+    // Parse the preferred time to set cutoff (e.g., "7:00 PM")
+    const timeMatch = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (timeMatch && timeMatch[1] && timeMatch[2] && timeMatch[3]) {
+      let hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
+      const isPM = timeMatch[3].toUpperCase() === 'PM';
+      if (isPM && hours !== 12) hours += 12;
+      if (!isPM && hours === 12) hours = 0;
+
+      watchUntil = new Date(preferredDate);
+      watchUntil.setHours(hours, minutes, 0, 0);
+      // Stop watching 2 hours before the show
+      watchUntil.setTime(watchUntil.getTime() - 2 * 60 * 60 * 1000);
+    } else {
+      // Default: watch until end of preferred date
+      watchUntil = new Date(preferredDate);
+      watchUntil.setHours(23, 59, 59, 999);
+    }
+
+    // Ensure watchUntil is in the future
+    if (watchUntil <= now) {
+      await ctx.reply('The showtime has already passed or is too soon. Please choose a future show.');
+      return;
+    }
 
     const job = await jobService.createJob({
       userId: user.id,
@@ -147,6 +184,11 @@ export async function quickJobCommand(ctx: CommandContext<Context>): Promise<voi
       theatre,
     });
 
+    const watchUntilStr = watchUntil.toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+
     await ctx.reply(
       `✅ *Booking Job Created!*\n\n` +
       `Job ID: \`${job.id.substring(0, 8)}\`\n` +
@@ -155,7 +197,8 @@ export async function quickJobCommand(ctx: CommandContext<Context>): Promise<voi
       `Theatre: ${theatre}\n` +
       `Date: ${date}\n` +
       `Time: ${time}\n` +
-      `Seats: ${seatCount}\n\n` +
+      `Seats: ${seatCount}\n` +
+      `Watch Until: ${watchUntilStr}\n\n` +
       `I'll monitor for tickets and book automatically when available.\n\n` +
       `Use /myjobs to see all your jobs.`,
       { parse_mode: 'Markdown' }
@@ -577,7 +620,61 @@ export async function handleSeatsCallback(ctx: MyContext): Promise<void> {
     // Create the job
     const user = await userService.getOrCreate(telegramId);
     const now = new Date();
-    const watchUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // Calculate smart watch window based on preferred date/time
+    let watchUntil: Date;
+    const preferredDate = draft.preferredDates?.[0];
+    const preferredTime = draft.preferredTimes?.[0];
+
+    if (preferredDate) {
+      // Parse date (e.g., "27" or "2025-12-27")
+      const targetDate = preferredDate.includes('-')
+        ? new Date(preferredDate)
+        : (() => {
+            const d = new Date();
+            const day = parseInt(preferredDate, 10);
+            d.setDate(day);
+            if (d < now) d.setMonth(d.getMonth() + 1);
+            return d;
+          })();
+
+      // Parse time if provided
+      if (preferredTime) {
+        const timeMatch = preferredTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeMatch && timeMatch[1] && timeMatch[2] && timeMatch[3]) {
+          let hours = parseInt(timeMatch[1], 10);
+          const minutes = parseInt(timeMatch[2], 10);
+          const isPM = timeMatch[3].toUpperCase() === 'PM';
+          if (isPM && hours !== 12) hours += 12;
+          if (!isPM && hours === 12) hours = 0;
+
+          watchUntil = new Date(targetDate);
+          watchUntil.setHours(hours, minutes, 0, 0);
+          // Stop watching 2 hours before the show
+          watchUntil.setTime(watchUntil.getTime() - 2 * 60 * 60 * 1000);
+        } else {
+          watchUntil = new Date(targetDate);
+          watchUntil.setHours(23, 59, 59, 999);
+        }
+      } else {
+        // No specific time - watch until end of day
+        watchUntil = new Date(targetDate);
+        watchUntil.setHours(23, 59, 59, 999);
+      }
+    } else {
+      // No preferred date - default to 3 days
+      watchUntil = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    }
+
+    // Ensure watchUntil is in the future
+    if (watchUntil <= now) {
+      await ctx.editMessageText(
+        'The showtime has already passed or is too soon. Please start over with /newjob and choose a future show.'
+      );
+      ctx.session.step = undefined;
+      ctx.session.jobDraft = undefined;
+      return;
+    }
 
     const job = await jobService.createJob({
       userId: user.id,
@@ -613,6 +710,11 @@ export async function handleSeatsCallback(ctx: MyContext): Promise<void> {
     });
 
     // Update the message with job details
+    const watchUntilStr = watchUntil.toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+
     await ctx.editMessageText(
       `🎉 *Booking Job Created!*\n\n` +
       `Job ID: \`${job.id.substring(0, 8)}\`\n` +
@@ -621,7 +723,8 @@ export async function handleSeatsCallback(ctx: MyContext): Promise<void> {
       `Theatre(s): ${draft.theatres?.join(', ')}\n` +
       `Date(s): ${draft.preferredDates?.join(', ') || 'Any'}\n` +
       `Time(s): ${draft.preferredTimes?.join(', ') || 'Any'}\n` +
-      `Seats: ${seatCount}\n\n` +
+      `Seats: ${seatCount}\n` +
+      `Watch Until: ${watchUntilStr}\n\n` +
       `I'll monitor for tickets and book automatically!\n\n` +
       `Use /myjobs to see all your jobs.`,
       { parse_mode: 'Markdown' }

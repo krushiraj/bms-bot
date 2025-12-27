@@ -7,6 +7,8 @@ import { logger } from '../../utils/logger.js';
 import { launchBrowser, createContext, createPage } from '../../automation/browser.js';
 import { HomePage } from '../../automation/pages/HomePage.js';
 import { ShowtimesPage } from '../../automation/pages/ShowtimesPage.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface WatchJobData {
   jobId: string;
@@ -17,6 +19,68 @@ export interface WatchResult {
   theatre?: string;
   showtime?: string;
   error?: string;
+}
+
+const DEBUG_DIR = 'screenshots/watch-debug';
+
+// Ensure debug directory exists
+if (!fs.existsSync(DEBUG_DIR)) {
+  fs.mkdirSync(DEBUG_DIR, { recursive: true });
+}
+
+async function saveDebugInfo(page: any, jobId: string, stage: string): Promise<void> {
+  const timestamp = Date.now();
+  const prefix = `${DEBUG_DIR}/${jobId}-${stage}-${timestamp}`;
+
+  try {
+    // Save screenshot
+    await page.screenshot({ path: `${prefix}.png`, fullPage: true });
+    logger.info('Debug screenshot saved', { path: `${prefix}.png` });
+
+    // Save page HTML
+    const html = await page.content();
+    fs.writeFileSync(`${prefix}.html`, html);
+    logger.info('Debug HTML saved', { path: `${prefix}.html` });
+
+    // Save relevant element info
+    const debugInfo: any = {
+      url: page.url(),
+      timestamp: new Date().toISOString(),
+      stage,
+    };
+
+    // Check for various elements
+    const selectors = [
+      { name: 'venueList', selector: '[class*="venue"]' },
+      { name: 'cinemaList', selector: '[class*="cinema"]' },
+      { name: 'theatreList', selector: '[class*="theatre"]' },
+      { name: 'showtimeList', selector: '[class*="showtime"]' },
+      { name: 'virtualizedGrid', selector: '.ReactVirtualized__Grid' },
+      { name: 'scE8nk8f', selector: '[class*="sc-e8nk8f"]' },
+      { name: 'sc1la7659', selector: '[class*="sc-1la7659"]' },
+      { name: 'buytickets', selector: 'a[href*="/buytickets/"]' },
+      { name: 'sessionBtn', selector: '[class*="session"]' },
+      { name: 'datePill', selector: '[id^="2025"], [id^="2026"]' },
+    ];
+
+    for (const { name, selector } of selectors) {
+      const count = await page.locator(selector).count();
+      debugInfo[name] = { count };
+      if (count > 0 && count <= 5) {
+        const texts: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const text = await page.locator(selector).nth(i).textContent().catch(() => '');
+          texts.push(text?.substring(0, 100) || '');
+        }
+        debugInfo[name].samples = texts;
+      }
+    }
+
+    fs.writeFileSync(`${prefix}.json`, JSON.stringify(debugInfo, null, 2));
+    logger.info('Debug info saved', { path: `${prefix}.json` });
+  } catch (error) {
+    logger.error('Failed to save debug info', { error: String(error) });
+  }
 }
 
 /**
@@ -68,7 +132,7 @@ export async function processWatchJob(job: Job<WatchJobData>): Promise<WatchResu
   // Launch browser and check for tickets
   let browser = null;
   try {
-    browser = await launchBrowser({ headless: true });
+    browser = await launchBrowser();
     const context = await createContext(browser);
     const page = await createPage(context);
 
@@ -92,15 +156,40 @@ export async function processWatchJob(job: Job<WatchJobData>): Promise<WatchResu
 
     // Check showtimes page
     const showtimesPage = new ShowtimesPage(page);
+
+    // Wait a bit longer for page to fully load
+    await page.waitForTimeout(3000);
+
+    // Save debug info before checking showtimes
+    await saveDebugInfo(page, jobId, 'before-showtime-check');
+
     const hasShowtimes = await showtimesPage.waitForShowtimes();
 
     if (!hasShowtimes) {
       logger.info('No showtimes available', { jobId, movieName: bookingJob.movieName });
+      // Save additional debug info when no showtimes found
+      await saveDebugInfo(page, jobId, 'no-showtimes-found');
+
+      await context.close();
+      await browser.close();
       return { ticketsFound: false };
     }
 
-    // Check for preferred theatres
+    // Check for preferred theatres and dates
     const showtimePrefs = bookingJob.showtimePrefs as { preferredDates?: string[]; preferredTimes?: string[] };
+
+    // Select the preferred date if provided
+    if (showtimePrefs.preferredDates?.[0]) {
+      const dateSelected = await showtimesPage.selectDateByDay(showtimePrefs.preferredDates[0]);
+      if (dateSelected) {
+        logger.info('Date selected', { date: showtimePrefs.preferredDates[0] });
+        await saveDebugInfo(page, jobId, 'after-date-selection');
+        // Wait for showtimes to refresh after date selection
+        await page.waitForTimeout(2000);
+      } else {
+        logger.warn('Could not select preferred date', { date: showtimePrefs.preferredDates[0] });
+      }
+    }
 
     // Try each preferred theatre
     for (const theatre of bookingJob.theatres) {
@@ -128,11 +217,13 @@ export async function processWatchJob(job: Job<WatchJobData>): Promise<WatchResu
         });
 
         // Add to booking queue
+        logger.info('Adding job to booking queue', { jobId });
         await bookingQueue.add(
           `booking-${jobId}`,
           { jobId },
           { jobId: `booking-${jobId}` }
         );
+        logger.info('Job added to booking queue', { jobId });
 
         await context.close();
         await browser.close();

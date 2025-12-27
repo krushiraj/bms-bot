@@ -84,7 +84,7 @@ export async function processBookingJob(job: Job<BookingJobData>): Promise<Booki
   // Run the booking flow
   const flow = new BookingFlow();
   try {
-    await flow.initialize(true); // headless mode
+    await flow.initialize(); // uses default (non-headless, BMS blocks headless)
 
     const result = await flow.attemptBooking(config);
 

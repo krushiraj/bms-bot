@@ -11,7 +11,8 @@ export async function helpCommand(ctx: CommandContext<MyContext>): Promise<void>
       `/jobstatus <id> - Check job details\n` +
       `/canceljob <id> - Cancel a job\n\n` +
       `*Account*\n` +
-      `/setcontact - Set email & phone for booking\n\n` +
+      `/setcontact - Set email & phone for booking\n` +
+      `/notifications - Manage notification preferences\n\n` +
       `*Gift Cards*\n` +
       `/addcard - Add a gift card\n` +
       `/mycards - List your cards\n` +

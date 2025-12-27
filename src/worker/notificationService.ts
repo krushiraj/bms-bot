@@ -1,6 +1,7 @@
 import { bot } from '../bot/index.js';
 import { InputFile } from 'grammy';
 import { logger } from '../utils/logger.js';
+import { prisma } from '../db/client.js';
 
 export type NotificationType =
   | 'job_created'
@@ -12,6 +13,15 @@ export type NotificationType =
   | 'job_completed'
   | 'job_failed'
   | 'job_expired';
+
+// Important notifications that are always sent (success/failure outcomes)
+const IMPORTANT_NOTIFICATIONS: NotificationType[] = [
+  'booking_success',
+  'booking_failed',
+  'job_completed',
+  'job_failed',
+  'job_expired',
+];
 
 export interface NotificationPayload {
   type: NotificationType;
@@ -31,10 +41,51 @@ export interface NotificationPayload {
  */
 export class NotificationService {
   /**
+   * Check if notification should be sent based on user/job preferences
+   */
+  private async shouldNotify(jobId: string, type: NotificationType): Promise<boolean> {
+    // Important notifications are always sent
+    if (IMPORTANT_NOTIFICATIONS.includes(type)) {
+      return true;
+    }
+
+    try {
+      // Get job with user to check preferences
+      const job = await prisma.bookingJob.findUnique({
+        where: { id: jobId },
+        include: { user: true },
+      });
+
+      if (!job) {
+        return true; // Default to sending if job not found
+      }
+
+      // Job-level preference overrides user-level
+      const notifyOnlySuccess = job.notifyOnlySuccess ?? job.user.notifyOnlySuccess;
+
+      if (notifyOnlySuccess) {
+        logger.debug('Skipping notification (notifyOnlySuccess enabled)', { jobId, type });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('Error checking notification preferences', { jobId, error: String(error) });
+      return true; // Default to sending on error
+    }
+  }
+
+  /**
    * Send a notification to a user via Telegram
    */
   async notify(chatId: string | number, payload: NotificationPayload): Promise<boolean> {
     try {
+      // Check if we should send this notification
+      const shouldSend = await this.shouldNotify(payload.jobId, payload.type);
+      if (!shouldSend) {
+        return true; // Return success since skipping is intentional
+      }
+
       const message = this.formatMessage(payload);
 
       await bot.api.sendMessage(chatId, message, {
@@ -129,10 +180,10 @@ export class NotificationService {
         return (
           `<b>Tickets Available!</b>\n\n` +
           `Job ID: <code>${jobIdShort}</code>\n` +
-          `Movie: ${movieName}\n` +
-          `Theatre: ${theatre}\n` +
-          `Showtime: ${showtime}\n\n` +
-          `Starting booking process...`
+          `Movie: ${movieName || 'N/A'}\n` +
+          `Theatre: ${theatre || 'N/A'}\n` +
+          (showtime ? `Showtime: ${showtime}\n` : '') +
+          `\nStarting booking process...`
         );
 
       case 'booking_started':

@@ -20,6 +20,10 @@ import {
   handleTimeCallback,
   handleSeatsCallback,
 } from './commands/jobs.js';
+import {
+  notificationsCommand,
+  handleNotificationCallback,
+} from './commands/settings.js';
 
 export interface JobDraft {
   movieName?: string;
@@ -73,6 +77,9 @@ bot.command('jobstatus', jobStatusCommand);
 bot.command('canceljob', cancelJobCommand);
 bot.command('setcontact', setContactCommand);
 
+// Settings commands
+bot.command('notifications', notificationsCommand);
+
 // Handle messages for interactive job creation
 bot.on('message:text', async (ctx, next) => {
   const handled = await handleJobMessage(ctx);
@@ -81,13 +88,15 @@ bot.on('message:text', async (ctx, next) => {
   }
 });
 
-// Handle callback queries for job creation buttons
+// Handle callback queries for job creation and settings buttons
 bot.on('callback_query:data', async (ctx, next) => {
   const data = ctx.callbackQuery.data;
   if (data.startsWith('time:')) {
     await handleTimeCallback(ctx);
   } else if (data.startsWith('seats:')) {
     await handleSeatsCallback(ctx);
+  } else if (data.startsWith('notify:')) {
+    await handleNotificationCallback(ctx);
   } else {
     await next();
   }
@@ -122,6 +131,7 @@ export async function startBot(): Promise<void> {
     { command: 'jobstatus', description: 'Check job status' },
     { command: 'canceljob', description: 'Cancel a booking job' },
     { command: 'setcontact', description: 'Set email and phone for booking' },
+    { command: 'notifications', description: 'Manage notification preferences' },
     { command: 'addcard', description: 'Add a gift card' },
     { command: 'mycards', description: 'List your gift cards' },
   ]);

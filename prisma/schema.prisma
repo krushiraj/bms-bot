@@ -8,13 +8,14 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(cuid())
-  telegramId String   @unique
-  email      String?
-  phone      String?
-  isAdmin    Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(cuid())
+  telegramId      String   @unique
+  email           String?
+  phone           String?
+  isAdmin         Boolean  @default(false)
+  notifyOnlySuccess Boolean @default(false) // Only send success/failure notifications
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   giftCards  GiftCard[]
   jobs       BookingJob[]
@@ -52,6 +53,9 @@ model BookingJob {
   theatres      String[]
   showtimePrefs Json
   seatPrefs     Json
+
+  // Notification preference (null = use user default)
+  notifyOnlySuccess Boolean?
 
   // Result
   bookingResult Json?
