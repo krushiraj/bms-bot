@@ -14,6 +14,9 @@ export interface BookingConfig {
   city: string;
   theatres: string[];           // Preferred theatres in order
   preferredTimes: string[];     // e.g., ["7:00 PM", "9:00 PM"]
+  preferredFormats?: string[];  // e.g., ["3D", "IMAX"]
+  preferredLanguages?: string[];// e.g., ["Hindi", "Telugu"]
+  preferredScreens?: string[];  // e.g., ["PCX", "DOLBY"]
   date?: string;                // Day of month (e.g., "28" for 28th)
   seatPrefs: SeatPrefs;
   userEmail: string;
@@ -188,7 +191,12 @@ export class BookingFlow {
       for (const theatre of config.theatres) {
         showtimeSelected = await showtimesPage.selectTheatreShowtime(
           theatre,
-          config.preferredTimes
+          config.preferredTimes,
+          {
+            formats: config.preferredFormats,
+            languages: config.preferredLanguages,
+            screens: config.preferredScreens,
+          }
         );
         if (showtimeSelected) break;
       }
