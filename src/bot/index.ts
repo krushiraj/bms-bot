@@ -51,6 +51,13 @@ import {
   toggleLanguageSelection,
   showScreenSelection,
   toggleScreenSelection,
+  handleMismatchKeep,
+  handleMismatchBook,
+  handleMismatchUpdate,
+  handleMismatchSelect,
+  handleMismatchTime,
+  handleMismatchCancel,
+  handleMismatchBack,
 } from './menus/index.js';
 import { userService } from '../services/userService.js';
 import { giftCardService } from '../services/giftCardService.js';
@@ -75,6 +82,16 @@ export interface SessionData {
   selectedFormats?: string[];
   selectedLanguages?: string[];
   selectedScreens?: string[];
+  selectedMismatchOption?: {
+    jobId: string;
+    optionIndex: number;
+    option: {
+      language: string;
+      format: string;
+      screen?: string;
+      times: string[];
+    };
+  };
 }
 
 export type MyContext = Context & SessionFlavor<SessionData>;
@@ -464,6 +481,45 @@ async function handleTimeSelection(ctx: MyContext): Promise<void> {
     { parse_mode: 'Markdown', reply_markup: timeKeyboard }
   );
 }
+
+// Mismatch handling callbacks
+bot.callbackQuery(/^mismatch:keep:(.+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  await handleMismatchKeep(ctx, jobId);
+});
+
+bot.callbackQuery(/^mismatch:book:(.+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  await handleMismatchBook(ctx, jobId);
+});
+
+bot.callbackQuery(/^mismatch:update:(.+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  await handleMismatchUpdate(ctx, jobId);
+});
+
+bot.callbackQuery(/^mismatch:select:(.+):(\d+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  const optionIndex = parseInt(ctx.match[2]!, 10);
+  await handleMismatchSelect(ctx, jobId, optionIndex);
+});
+
+bot.callbackQuery(/^mismatch:time:(.+):(\d+):(\d+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  const optionIndex = parseInt(ctx.match[2]!, 10);
+  const timeIndex = parseInt(ctx.match[3]!, 10);
+  await handleMismatchTime(ctx, jobId, optionIndex, timeIndex);
+});
+
+bot.callbackQuery(/^mismatch:cancel:(.+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  await handleMismatchCancel(ctx, jobId);
+});
+
+bot.callbackQuery(/^mismatch:back:(.+)$/, async (ctx) => {
+  const jobId = ctx.match[1]!;
+  await handleMismatchBack(ctx, jobId);
+});
 
 // Error handler
 bot.catch((err) => {

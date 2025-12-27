@@ -22,6 +22,9 @@ import {
   notificationKeyboard,
   contactKeyboard,
   cancelKeyboard,
+  mismatchOptionsKeyboard,
+  mismatchTimesKeyboard,
+  mismatchActionKeyboard,
 } from './keyboards.js';
 
 // Helper to edit message or send new if edit fails
@@ -580,4 +583,181 @@ export async function toggleScreenSelection(ctx: MyContext, screen: string): Pro
   ctx.session.selectedScreens = selectedScreens;
   await ctx.answerCallbackQuery();
   await showScreenSelection(ctx);
+}
+
+// ============ MISMATCH HANDLING ============
+
+export async function handleMismatchKeep(ctx: MyContext, jobId: string): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery('Continuing to watch...');
+    await jobService.resumeJob(jobId);
+    await ctx.editMessageCaption({
+      caption: `<b>Job Resumed</b>\n\nContinuing to watch for your preferred options...`,
+      parse_mode: 'HTML',
+    });
+    logger.info('User chose to keep trying', { jobId });
+  } catch (error) {
+    logger.error('Failed to handle mismatch keep', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error resuming job');
+  }
+}
+
+export async function handleMismatchBook(ctx: MyContext, jobId: string): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery('Proceeding with available options...');
+    const job = await jobService.getJobWithOptions(jobId);
+    if (!job || !job.availableOptions) {
+      await ctx.answerCallbackQuery('No available options found');
+      return;
+    }
+    const options = (job.availableOptions as { options: Array<{ language: string; format: string; screen?: string; times: string[] }> }).options;
+    const firstOption = options[0];
+    if (firstOption) {
+      await jobService.updateJobPreferences(jobId, {
+        preferredFormats: [firstOption.format],
+        preferredLanguages: [firstOption.language],
+        preferredScreens: firstOption.screen ? [firstOption.screen] : undefined,
+        preferredTimes: firstOption.times.slice(0, 1),
+      });
+      await ctx.editMessageCaption({
+        caption: `<b>Booking Available Option</b>\n\n` +
+          `Selected: ${firstOption.language} ${firstOption.format}${firstOption.screen ? ` (${firstOption.screen})` : ''}\n` +
+          `Time: ${firstOption.times[0]}\n\n` +
+          `Proceeding with booking...`,
+        parse_mode: 'HTML',
+      });
+    }
+    logger.info('User chose to book available', { jobId });
+  } catch (error) {
+    logger.error('Failed to handle mismatch book', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error processing request');
+  }
+}
+
+export async function handleMismatchUpdate(ctx: MyContext, jobId: string): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery();
+    const job = await jobService.getJobWithOptions(jobId);
+    if (!job || !job.availableOptions) {
+      await ctx.answerCallbackQuery('No available options found');
+      return;
+    }
+    const availableOptions = (job.availableOptions as { options: Array<{ language: string; format: string; screen?: string; times: string[] }> }).options;
+    const keyboard = mismatchOptionsKeyboard(jobId, availableOptions);
+    await ctx.editMessageCaption({
+      caption: `<b>Select New Preference</b>\n\nChoose from available options:`,
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+    logger.info('User chose to update preferences', { jobId });
+  } catch (error) {
+    logger.error('Failed to handle mismatch update', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error showing options');
+  }
+}
+
+export async function handleMismatchSelect(ctx: MyContext, jobId: string, optionIndex: number): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery();
+    const job = await jobService.getJobWithOptions(jobId);
+    if (!job || !job.availableOptions) {
+      await ctx.answerCallbackQuery('No available options found');
+      return;
+    }
+    const availableOptions = (job.availableOptions as { options: Array<{ language: string; format: string; screen?: string; times: string[] }> }).options;
+    const selectedOption = availableOptions[optionIndex];
+    if (!selectedOption) {
+      await ctx.answerCallbackQuery('Invalid option');
+      return;
+    }
+    ctx.session.selectedMismatchOption = {
+      jobId,
+      optionIndex,
+      option: selectedOption,
+    };
+    const keyboard = mismatchTimesKeyboard(jobId, selectedOption.times, optionIndex);
+    await ctx.editMessageCaption({
+      caption: `<b>Select Showtime</b>\n\n` +
+        `Selected: ${selectedOption.language} ${selectedOption.format}${selectedOption.screen ? ` (${selectedOption.screen})` : ''}\n\n` +
+        `Choose a showtime:`,
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+    logger.info('User selected option', { jobId, optionIndex });
+  } catch (error) {
+    logger.error('Failed to handle mismatch select', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error processing selection');
+  }
+}
+
+export async function handleMismatchTime(ctx: MyContext, jobId: string, optionIndex: number, timeIndex: number): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery('Updating preferences...');
+    const job = await jobService.getJobWithOptions(jobId);
+    if (!job || !job.availableOptions) {
+      await ctx.answerCallbackQuery('No available options found');
+      return;
+    }
+    const availableOptions = (job.availableOptions as { options: Array<{ language: string; format: string; screen?: string; times: string[] }> }).options;
+    const selectedOption = availableOptions[optionIndex];
+    const selectedTime = selectedOption?.times[timeIndex];
+    if (!selectedOption || !selectedTime) {
+      await ctx.answerCallbackQuery('Invalid selection');
+      return;
+    }
+    await jobService.updateJobPreferences(jobId, {
+      preferredFormats: [selectedOption.format],
+      preferredLanguages: [selectedOption.language],
+      preferredScreens: selectedOption.screen ? [selectedOption.screen] : undefined,
+      preferredTimes: [selectedTime],
+    });
+    await ctx.editMessageCaption({
+      caption: `<b>Preferences Updated</b>\n\n` +
+        `Format: ${selectedOption.format}\n` +
+        `Language: ${selectedOption.language}\n` +
+        (selectedOption.screen ? `Screen: ${selectedOption.screen}\n` : '') +
+        `Time: ${selectedTime}\n\n` +
+        `Resuming job with new preferences...`,
+      parse_mode: 'HTML',
+    });
+    logger.info('User selected time, preferences updated', { jobId, optionIndex, timeIndex });
+  } catch (error) {
+    logger.error('Failed to handle mismatch time', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error updating preferences');
+  }
+}
+
+export async function handleMismatchCancel(ctx: MyContext, jobId: string): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery('Cancelling job...');
+    await jobService.cancelJob(jobId);
+    await ctx.editMessageCaption({
+      caption: `<b>Job Cancelled</b>\n\nThe booking job has been cancelled.`,
+      parse_mode: 'HTML',
+    });
+    logger.info('User cancelled job from mismatch', { jobId });
+  } catch (error) {
+    logger.error('Failed to handle mismatch cancel', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error cancelling job');
+  }
+}
+
+export async function handleMismatchBack(ctx: MyContext, jobId: string): Promise<void> {
+  try {
+    await ctx.answerCallbackQuery();
+    const job = await jobService.getJobWithOptions(jobId);
+    if (!job) {
+      await ctx.answerCallbackQuery('Job not found');
+      return;
+    }
+    const keyboard = mismatchActionKeyboard(jobId);
+    await ctx.editMessageCaption({
+      caption: `<b>Preference Mismatch</b>\n\nWhat would you like to do?`,
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+  } catch (error) {
+    logger.error('Failed to handle mismatch back', { jobId, error: String(error) });
+    await ctx.answerCallbackQuery('Error going back');
+  }
 }
