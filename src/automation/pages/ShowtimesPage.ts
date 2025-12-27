@@ -20,6 +20,19 @@ export interface ShowtimePreferences {
   screens?: string[];    // ["PCX", "DOLBY", "LASER"]
 }
 
+export interface AvailableShowtime {
+  theatre: string;
+  language: string;
+  format: string;
+  screen?: string;
+  times: string[];
+}
+
+export interface AvailableOptions {
+  scrapedAt: string;
+  options: AvailableShowtime[];
+}
+
 export class ShowtimesPage extends BasePage {
   // Multiple selectors for robustness against BMS UI changes
   // BMS uses styled-components with dynamic class names like sc-xxxxx-0
@@ -540,5 +553,105 @@ export class ShowtimesPage extends BasePage {
       logger.error('Failed to click first showtime', { error });
       return false;
     }
+  }
+
+  /**
+   * Scrape all available showtimes from the current page
+   * Used when user preferences don't match available options
+   */
+  async scrapeAvailableOptions(): Promise<AvailableOptions> {
+    logger.info('Scraping available options');
+
+    const options: AvailableShowtime[] = [];
+
+    try {
+      // Get all theatre rows
+      const theatreRows = await this.page.evaluate(() => {
+        const results: Array<{
+          theatre: string;
+          showtimes: Array<{
+            time: string;
+            format: string;
+            language: string;
+            screen?: string;
+          }>;
+        }> = [];
+
+        // Find all venue containers
+        const venueContainers = document.querySelectorAll('[class*="venue"], [class*="cinema"]');
+
+        for (const container of venueContainers) {
+          const theatreName = container.querySelector('[class*="name"], h3, h4')?.textContent?.trim() || '';
+          if (!theatreName) continue;
+
+          const showtimes: Array<{
+            time: string;
+            format: string;
+            language: string;
+            screen?: string;
+          }> = [];
+
+          // Find showtime buttons within this venue
+          const showtimeButtons = container.querySelectorAll('a[href*="/buytickets/"], [class*="showtime"], [class*="session"]');
+
+          for (const btn of showtimeButtons) {
+            const text = btn.textContent?.trim() || '';
+            // Extract time (pattern like "10:30 AM" or "7:00 PM")
+            const timeMatch = text.match(/\d{1,2}:\d{2}\s*(?:AM|PM)/i);
+            if (timeMatch) {
+              // Look for format/language info in parent or sibling elements
+              const parentText = btn.parentElement?.textContent || '';
+              const format = parentText.match(/\b(2D|3D|4DX|IMAX)\b/i)?.[1] || '2D';
+              const screen = parentText.match(/\b(IMAX|PCX|DOLBY|LASER|BARCO|ICE|ONYX)\b/i)?.[1];
+
+              showtimes.push({
+                time: timeMatch[0],
+                format: format.toUpperCase(),
+                language: '', // Will be filled from page context
+                screen,
+              });
+            }
+          }
+
+          if (showtimes.length > 0) {
+            results.push({ theatre: theatreName, showtimes });
+          }
+        }
+
+        return results;
+      });
+
+      // Group by theatre, language, format
+      for (const row of theatreRows) {
+        const grouped: Record<string, AvailableShowtime> = {};
+
+        for (const st of row.showtimes) {
+          const key = `${st.format}-${st.language || 'Unknown'}-${st.screen || 'Standard'}`;
+          if (!grouped[key]) {
+            grouped[key] = {
+              theatre: row.theatre,
+              language: st.language || 'Unknown',
+              format: st.format,
+              screen: st.screen,
+              times: [],
+            };
+          }
+          if (!grouped[key].times.includes(st.time)) {
+            grouped[key].times.push(st.time);
+          }
+        }
+
+        options.push(...Object.values(grouped));
+      }
+
+      logger.info('Scraped available options', { count: options.length });
+    } catch (error) {
+      logger.error('Failed to scrape available options', { error: String(error) });
+    }
+
+    return {
+      scrapedAt: new Date().toISOString(),
+      options,
+    };
   }
 }
