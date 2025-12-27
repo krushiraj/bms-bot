@@ -54,6 +54,9 @@ export interface JobDraft {
   city?: string;
   theatres?: string[];
   preferredDates?: string[];
+  preferredFormats?: string[];
+  preferredLanguages?: string[];
+  preferredScreens?: string[];
   preferredTimes?: string[];
   seatCount?: number;
 }
@@ -63,6 +66,9 @@ export interface SessionData {
   jobDraft?: JobDraft;
   menuMessageId?: number;
   selectedDates?: string[];
+  selectedFormats?: string[];
+  selectedLanguages?: string[];
+  selectedScreens?: string[];
 }
 
 export type MyContext = Context & SessionFlavor<SessionData>;
