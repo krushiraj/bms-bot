@@ -36,11 +36,23 @@ export interface SeatScore {
 export interface SeatGroup {
   seats: Seat[];
   avgScore: number;
+  totalPrice?: number;
 }
 
 /**
  * Score a single seat based on position preferences
  * Returns 0-1 (higher is better)
+ *
+ * Scoring Logic (Circular with Upper Bias):
+ * - CENTER seat (vertically and horizontally) is the "bullseye" - highest score
+ * - Score decreases as you move away from center (like a circle)
+ * - When equidistant from center:
+ *   - UPPER sector (above center) is preferred
+ *   - LEFT/RIGHT sectors (same level as center) are next
+ *   - LOWER sector (below center) is least preferred
+ * - Front N rows are avoided completely (too close to screen)
+ *
+ * Priority: Center > Upper-Near > Side-Near > Lower-Near > Upper-Far > Side-Far > Lower-Far
  */
 export function scoreSeat(
   seat: Seat,
@@ -53,7 +65,7 @@ export function scoreSeat(
 
   const rowNumber = row.rowNumber;
 
-  // Vertical score: prefer middle-back rows, avoid front
+  // Avoid bottom N rows (too close to screen)
   const minRow = prefs.avoidBottomRows;
   const usableRows = totalRows - minRow;
 
@@ -62,29 +74,53 @@ export function scoreSeat(
   }
 
   if (rowNumber <= minRow) {
-    return 0.1; // Penalize front rows heavily
+    return 0.05; // Penalize front rows heavily
   }
 
-  // Ideal row is about 40% into the usable zone
-  const idealRow = minRow + usableRows * 0.4;
-  const rowDistance = Math.abs(rowNumber - idealRow);
-  const verticalScore = Math.max(0, 1 - rowDistance / usableRows);
+  // Calculate ideal center position (the "bullseye")
+  // Vertical center: middle of usable rows (slightly towards back for comfort)
+  const idealRow = minRow + usableRows * 0.55; // 55% into usable area
+  // Horizontal center: middle of row
+  const centerSeat = maxSeatsPerRow / 2;
 
-  // Horizontal score: prefer center
   if (maxSeatsPerRow === 0) {
     return 0;
   }
-  const centerSeat = maxSeatsPerRow / 2;
-  const seatDistance = Math.abs(seat.number - centerSeat);
-  const horizontalScore = Math.max(0, 1 - seatDistance / (maxSeatsPerRow / 2));
 
-  // Corner penalty - only apply to actual usable rows at edges
-  const isCorner =
-    (rowNumber === minRow + 1 || rowNumber === totalRows) &&
-    (seat.number <= 2 || seat.number >= maxSeatsPerRow - 1);
-  const cornerPenalty = isCorner ? 0.3 : 0;
+  // Calculate distance from center
+  const rowPosition = rowNumber - minRow;
+  const verticalDistance = Math.abs(rowPosition - (usableRows * 0.55)) / usableRows;
+  const horizontalDistance = Math.abs(seat.number - centerSeat) / (maxSeatsPerRow / 2);
 
-  const score = (verticalScore * 0.5 + horizontalScore * 0.5) - cornerPenalty;
+  // Combined circular distance (Euclidean-like)
+  const circularDistance = Math.sqrt(
+    verticalDistance * verticalDistance + horizontalDistance * horizontalDistance
+  );
+
+  // Base score from distance (1.0 at center, decreasing outward)
+  const distanceScore = Math.max(0, 1 - circularDistance * 0.7);
+
+  // Upper sector bias: seats above ideal row get a bonus, below get a penalty
+  let verticalBias = 0;
+  if (rowPosition > usableRows * 0.55) {
+    // Above center (upper sector) - bonus
+    const aboveRatio = (rowPosition - usableRows * 0.55) / (usableRows * 0.45);
+    verticalBias = Math.min(0.15, aboveRatio * 0.15); // Up to 15% bonus
+  } else if (rowPosition < usableRows * 0.55) {
+    // Below center (lower sector) - penalty
+    const belowRatio = (usableRows * 0.55 - rowPosition) / (usableRows * 0.55);
+    verticalBias = -Math.min(0.15, belowRatio * 0.15); // Up to 15% penalty
+  }
+
+  // Corner penalty (more severe for lower corners)
+  const isCorner = seat.number <= 2 || seat.number >= maxSeatsPerRow - 1;
+  const isLowerHalf = rowPosition < usableRows * 0.5;
+  let cornerPenalty = 0;
+  if (isCorner) {
+    cornerPenalty = isLowerHalf ? 0.2 : 0.08;
+  }
+
+  const score = distanceScore + verticalBias - cornerPenalty;
   return Math.max(0, Math.min(1, score));
 }
 

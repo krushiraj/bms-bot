@@ -3,6 +3,9 @@ import { config } from './utils/config.js';
 import { logger } from './utils/logger.js';
 import { connectDatabase, disconnectDatabase } from './db/client.js';
 import { startBot, stopBot } from './bot/index.js';
+import { startWorkers, stopWorkers } from './worker/worker.js';
+import { startScheduler, stopScheduler } from './worker/scheduler.js';
+import { testRedisConnection, closeRedisConnections } from './worker/redis.js';
 
 async function main(): Promise<void> {
   logger.info('Starting BMS Bot...', { nodeEnv: config.nodeEnv });
@@ -10,6 +13,22 @@ async function main(): Promise<void> {
   // Connect to database
   await connectDatabase();
   logger.info('Database connected');
+
+  // Test Redis connection
+  const redisConnected = await testRedisConnection();
+  if (redisConnected) {
+    logger.info('Redis connected');
+
+    // Start job workers
+    startWorkers();
+    logger.info('Job workers started');
+
+    // Start job scheduler
+    startScheduler();
+    logger.info('Job scheduler started');
+  } else {
+    logger.warn('Redis not available - job processing disabled');
+  }
 
   // Start Telegram bot
   await startBot();
@@ -20,6 +39,16 @@ async function main(): Promise<void> {
 async function shutdown(): Promise<void> {
   logger.info('Shutting down...');
 
+  // Stop scheduler first
+  stopScheduler();
+
+  // Stop workers
+  await stopWorkers();
+
+  // Close Redis connections
+  await closeRedisConnections();
+
+  // Stop bot and database
   await stopBot();
   await disconnectDatabase();
 

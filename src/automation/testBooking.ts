@@ -11,10 +11,11 @@ import { logger } from '../utils/logger.js';
 let flow: BookingFlow | null = null;
 
 const config: BookingConfig = {
-  movieName: process.env.TEST_MOVIE || 'Pushpa 2',
+  movieName: process.env.TEST_MOVIE || 'Dhurandhar',
   city: process.env.TEST_CITY || 'hyderabad',
-  theatres: ['PVR', 'INOX', 'Cinepolis'],
-  preferredTimes: ['7:00', '8:00', '9:00'],
+  theatres: ['AMB Cinemas'],
+  preferredTimes: ['12:00', '1:00', '2:00', '3:00', '4:00'],
+  date: process.env.TEST_DATE || '28', // Day of month to book for (e.g., '28' for 28th)
   seatPrefs: {
     count: 2,
     avoidBottomRows: 3,
@@ -23,7 +24,10 @@ const config: BookingConfig = {
   },
   userEmail: 'test@example.com',
   userPhone: '9876543210',
-  giftCards: [],
+  // Test gift card - expected to be rejected as invalid
+  giftCards: [
+    { cardNumber: '1234567890123456', pin: '1234' },
+  ],
 };
 
 async function cleanup(): Promise<void> {
