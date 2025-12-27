@@ -1,17 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Mock Redis as a class
+class MockRedis {
+  on = vi.fn();
+  quit = vi.fn();
+}
+
+// Mock Queue as a class
+class MockQueue {
+  add = vi.fn();
+  close = vi.fn();
+}
+
 vi.mock('ioredis', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    on: vi.fn(),
-    quit: vi.fn(),
-  })),
+  default: MockRedis,
 }));
 
 vi.mock('bullmq', () => ({
-  Queue: vi.fn().mockImplementation(() => ({
-    add: vi.fn(),
-    close: vi.fn(),
-  })),
+  Queue: MockQueue,
 }));
 
 describe('Queue Setup', () => {
