@@ -4,6 +4,34 @@ import { logger } from '../../utils/logger.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Common city name aliases and misspellings
+const CITY_ALIASES: Record<string, string> = {
+  'bangalore': 'bengaluru',
+  'banglore': 'bengaluru',
+  'bangaluru': 'bengaluru',
+  'bombay': 'mumbai',
+  'madras': 'chennai',
+  'calcutta': 'kolkata',
+  'kolkatta': 'kolkata',
+  'hydrabad': 'hyderabad',
+  'hyderbad': 'hyderabad',
+  'hydra': 'hyderabad',
+  'gurgaon': 'gurugram',
+  'pondicherry': 'puducherry',
+  'trivandrum': 'thiruvananthapuram',
+  'cochin': 'kochi',
+  'poona': 'pune',
+  'delhi': 'delhi-ncr',
+  'new delhi': 'delhi-ncr',
+  'noida': 'delhi-ncr',
+  'ghaziabad': 'delhi-ncr',
+};
+
+function normalizeCity(city: string): string {
+  const normalized = city.toLowerCase().trim().replace(/[^a-z\s-]/g, '');
+  return CITY_ALIASES[normalized] || normalized;
+}
+
 export class HomePage extends BasePage {
   private baseUrl = 'https://in.bookmyshow.com';
 
@@ -31,8 +59,12 @@ export class HomePage extends BasePage {
 
   async navigate(city = 'hyderabad'): Promise<void> {
     try {
-      const url = `${this.baseUrl}/explore/home/${city}`;
-      logger.info('Navigating to BMS', { url });
+      const normalizedCity = normalizeCity(city);
+      if (normalizedCity !== city.toLowerCase().trim()) {
+        logger.info('City name normalized', { original: city, normalized: normalizedCity });
+      }
+      const url = `${this.baseUrl}/explore/home/${normalizedCity}`;
+      logger.info('Navigating to BMS', { url, city: normalizedCity });
       await this.page.goto(url, { timeout: 30000 });
       await this.waitForLoad();
       // Extra wait for dynamic content
@@ -412,6 +444,172 @@ export class HomePage extends BasePage {
       await this.saveDebugScreenshot('no-dialog-found');
     } catch (error) {
       logger.debug('Age confirmation handling error (non-fatal)', { error });
+    }
+  }
+
+  /**
+   * Handle the "Select language and format" dialog that appears for movies with multiple versions
+   * This dialog shows language sections (ENGLISH, TELUGU, HINDI) with format buttons (2D, 3D, IMAX, 4DX)
+   */
+  async handleLanguageFormatDialog(
+    preferredLanguages?: string[],
+    preferredFormats?: string[]
+  ): Promise<boolean> {
+    try {
+      // Wait for dialog to appear
+      await this.page.waitForTimeout(1000);
+
+      // Check if the dialog is visible - look for "Select language and format" text
+      const dialogVisible = await this.page.evaluate(() => {
+        const allText = document.body.innerText;
+        return allText.includes('Select language and format');
+      });
+
+      if (!dialogVisible) {
+        logger.debug('No language/format dialog found');
+        return false;
+      }
+
+      logger.info('Found language/format dialog', { preferredLanguages, preferredFormats });
+      await this.saveDebugScreenshot('language-format-dialog');
+
+      // Try to find and click the best matching option
+      // Dialog structure: Language headers (ENGLISH, TELUGU, HINDI) with format buttons below
+      const clicked = await this.page.evaluate((prefs) => {
+        const { languages, formats } = prefs;
+
+        // Find all clickable format buttons in the dialog
+        // These are typically divs or buttons with format text (2D, 3D, 4DX, IMAX)
+        const formatButtons: Array<{ element: HTMLElement; language: string; format: string }> = [];
+
+        // Look for the dialog container
+        const dialogText = document.body.innerText;
+        if (!dialogText.includes('Select language and format')) {
+          return { clicked: false, reason: 'dialog not found' };
+        }
+
+        // Find all format buttons - they're usually in a specific pattern
+        // Look for elements that contain format text and are clickable
+        const allElements = document.querySelectorAll('div, button, span');
+        let currentLanguage = '';
+
+        for (const el of allElements) {
+          const text = el.textContent?.trim().toUpperCase() || '';
+
+          // Check if this is a language header
+          if (['ENGLISH', 'TELUGU', 'HINDI', 'TAMIL', 'KANNADA', 'MALAYALAM'].includes(text)) {
+            currentLanguage = text;
+            continue;
+          }
+
+          // Check if this is a format button
+          const formatPatterns = ['2D', '3D', '4DX', 'IMAX', '4DX 3D', 'IMAX 3D', 'ICE', 'SCREEN X'];
+          for (const format of formatPatterns) {
+            if (text === format || text.includes(format)) {
+              // This looks like a format button
+              const rect = el.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) {
+                formatButtons.push({
+                  element: el as HTMLElement,
+                  language: currentLanguage,
+                  format: format
+                });
+              }
+              break;
+            }
+          }
+        }
+
+        if (formatButtons.length === 0) {
+          return { clicked: false, reason: 'no format buttons found' };
+        }
+
+        // Score each button based on preferences
+        let bestButton = formatButtons[0];
+        let bestScore = 0;
+
+        for (const btn of formatButtons) {
+          let score = 0;
+
+          // Language match (+100)
+          if (languages && languages.length > 0) {
+            for (const prefLang of languages) {
+              if (btn.language.toUpperCase().includes(prefLang.toUpperCase())) {
+                score += 100;
+                break;
+              }
+            }
+          }
+
+          // Format match (+50)
+          if (formats && formats.length > 0) {
+            for (const prefFormat of formats) {
+              if (btn.format.toUpperCase().includes(prefFormat.toUpperCase())) {
+                score += 50;
+                break;
+              }
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestButton = btn;
+          }
+        }
+
+        // Click the best button
+        if (bestButton) {
+          bestButton.element.click();
+          return {
+            clicked: true,
+            language: bestButton.language,
+            format: bestButton.format,
+            score: bestScore
+          };
+        }
+
+        return { clicked: false, reason: 'no suitable button found' };
+      }, { languages: preferredLanguages, formats: preferredFormats });
+
+      if (clicked.clicked) {
+        logger.info('Selected language/format', {
+          language: clicked.language,
+          format: clicked.format,
+          score: clicked.score
+        });
+        await this.page.waitForTimeout(2000);
+        return true;
+      } else {
+        logger.warn('Could not click language/format button', { reason: clicked.reason });
+
+        // Fallback: try clicking the first visible format button
+        const fallbackClicked = await this.page.evaluate(() => {
+          const formatPatterns = ['2D', '3D', '4DX', 'IMAX'];
+          const allElements = document.querySelectorAll('div, button, span');
+
+          for (const el of allElements) {
+            const text = el.textContent?.trim().toUpperCase() || '';
+            for (const format of formatPatterns) {
+              if (text === format) {
+                (el as HTMLElement).click();
+                return { clicked: true, format };
+              }
+            }
+          }
+          return { clicked: false };
+        });
+
+        if (fallbackClicked.clicked) {
+          logger.info('Fallback: clicked first format button', { format: fallbackClicked.format });
+          await this.page.waitForTimeout(2000);
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      logger.error('Failed to handle language/format dialog', { error: String(error) });
+      return false;
     }
   }
 
