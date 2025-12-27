@@ -14,6 +14,12 @@ export interface Theatre {
   showtimes: Showtime[];
 }
 
+export interface ShowtimePreferences {
+  formats?: string[];    // ["3D", "IMAX"]
+  languages?: string[];  // ["Hindi", "Telugu"]
+  screens?: string[];    // ["PCX", "DOLBY", "LASER"]
+}
+
 export class ShowtimesPage extends BasePage {
   // Multiple selectors for robustness against BMS UI changes
   // BMS uses styled-components with dynamic class names like sc-xxxxx-0
@@ -57,6 +63,100 @@ export class ShowtimesPage extends BasePage {
     // Showtime time display
     showtimeTime: '[class*="sc-1vhizuf-2"]',
   };
+
+  /**
+   * Parse showtime pill text to extract format, language, screen info
+   * BMS pills contain info like "7:00 PM", "3D", "PCX", etc.
+   */
+  private parseShowtimePill(text: string): {
+    time: string;
+    format?: string;
+    screen?: string;
+  } {
+    const result: { time: string; format?: string; screen?: string } = { time: '' };
+
+    // Extract time (pattern like "7:00 PM", "10:30 AM")
+    const timeMatch = text.match(/\d{1,2}:\d{2}\s*(?:AM|PM)/i);
+    if (timeMatch) {
+      result.time = timeMatch[0].toUpperCase();
+    }
+
+    // Check for format indicators
+    const formats = ['IMAX', '4DX', '3D', '2D'];
+    for (const format of formats) {
+      if (text.toUpperCase().includes(format)) {
+        result.format = format;
+        break;
+      }
+    }
+
+    // Check for screen indicators
+    const screens = ['PCX', 'DOLBY', 'LASER', 'BARCO', 'ICE', 'ONYX', 'ATMOS'];
+    for (const screen of screens) {
+      if (text.toUpperCase().includes(screen)) {
+        result.screen = screen;
+        break;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Score a showtime based on user preferences
+   * Higher score = better match
+   */
+  private scoreShowtime(
+    pillText: string,
+    preferredTimes: string[],
+    prefs?: ShowtimePreferences
+  ): number {
+    let score = 0;
+    const parsed = this.parseShowtimePill(pillText);
+    const upperText = pillText.toUpperCase();
+
+    // Screen match: highest priority (+100)
+    if (prefs?.screens?.length) {
+      for (const screen of prefs.screens) {
+        if (upperText.includes(screen.toUpperCase())) {
+          score += 100;
+          break;
+        }
+      }
+    }
+
+    // Format match: high priority (+50)
+    if (prefs?.formats?.length) {
+      for (const format of prefs.formats) {
+        if (upperText.includes(format.toUpperCase())) {
+          score += 50;
+          break;
+        }
+      }
+    }
+
+    // Language match: medium priority (+25)
+    if (prefs?.languages?.length) {
+      for (const lang of prefs.languages) {
+        if (upperText.includes(lang.toUpperCase())) {
+          score += 25;
+          break;
+        }
+      }
+    }
+
+    // Time match: lower priority (+10)
+    if (preferredTimes.length > 0) {
+      for (const time of preferredTimes) {
+        if (parsed.time.includes(time) || time.includes(parsed.time)) {
+          score += 10;
+          break;
+        }
+      }
+    }
+
+    return score;
+  }
 
   constructor(page: Page) {
     super(page, 'ShowtimesPage');
@@ -231,10 +331,11 @@ export class ShowtimesPage extends BasePage {
 
   async selectTheatreShowtime(
     theatreName: string,
-    preferredTimes: string[] = []
+    preferredTimes: string[] = [],
+    prefs?: ShowtimePreferences
   ): Promise<boolean> {
     try {
-      logger.info('Looking for theatre', { theatreName, preferredTimes });
+      logger.info('Looking for theatre', { theatreName, preferredTimes, prefs });
 
       // Wait for the virtualized list to render
       await this.page.waitForTimeout(2000);
@@ -260,61 +361,48 @@ export class ShowtimesPage extends BasePage {
         }
       }
 
-      // Find showtimes within the theatre row using the showtime pill class
+      // Find showtimes within the theatre row
       const showtimePills = theatreRow.locator('[class*="sc-1la7659-0"], [class*="sc-1vhizuf-1"]');
       const pillCount = await showtimePills.count();
 
       logger.debug('Found showtime pills in theatre', { theatreName, count: pillCount });
 
       if (pillCount === 0) {
-        // Try getting showtimes by time text directly
-        const timeElements = theatreRow.locator('[class*="sc-1vhizuf-2"]');
-        const timeCount = await timeElements.count();
+        logger.warn('No showtimes found for theatre', { theatreName });
+        return false;
+      }
 
-        if (timeCount === 0) {
-          logger.warn('No showtimes found for theatre', { theatreName });
-          return false;
+      // Score all showtimes and pick the best one
+      let bestPill: ReturnType<typeof showtimePills.nth> | null = null;
+      let bestScore = -1;
+      let bestText = '';
+
+      for (let i = 0; i < pillCount; i++) {
+        const pill = showtimePills.nth(i);
+        const text = await pill.textContent() || '';
+        const score = this.scoreShowtime(text, preferredTimes, prefs);
+
+        logger.debug('Scored showtime', { text: text.trim(), score });
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestPill = pill;
+          bestText = text;
         }
+      }
 
-        // Try preferred times first
-        for (const preferredTime of preferredTimes) {
-          for (let i = 0; i < timeCount; i++) {
-            const timeEl = timeElements.nth(i);
-            const text = await timeEl.textContent();
-
-            if (text?.includes(preferredTime)) {
-              logger.info('Found preferred showtime', { time: preferredTime });
-              // Click the parent pill element
-              await timeEl.click();
-              await this.waitForLoad();
-              return true;
-            }
-          }
-        }
-
-        // Click first time
-        logger.info('Using first available showtime for theatre');
-        await timeElements.first().click();
+      if (bestPill) {
+        logger.info('Selected best showtime', {
+          text: bestText.trim(),
+          score: bestScore,
+          hasPrefs: Boolean(prefs?.screens?.length || prefs?.formats?.length)
+        });
+        await bestPill.click();
         await this.waitForLoad();
         return true;
       }
 
-      // Try preferred times first
-      for (const preferredTime of preferredTimes) {
-        for (let i = 0; i < pillCount; i++) {
-          const pill = showtimePills.nth(i);
-          const text = await pill.textContent();
-
-          if (text?.includes(preferredTime)) {
-            logger.info('Found preferred showtime', { time: preferredTime });
-            await pill.click();
-            await this.waitForLoad();
-            return true;
-          }
-        }
-      }
-
-      // No preferred time found, click first available
+      // Fallback: click first available
       logger.info('Using first available showtime for theatre');
       await showtimePills.first().click();
       await this.waitForLoad();
