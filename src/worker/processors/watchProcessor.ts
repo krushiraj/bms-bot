@@ -1,5 +1,6 @@
 import { Job } from 'bullmq';
 import { JobStatus } from '@prisma/client';
+import { InputFile } from 'grammy';
 import { jobService, JobWithUser } from '../jobService.js';
 import { notificationService } from '../notificationService.js';
 import { bookingQueue } from '../queues.js';
@@ -7,6 +8,8 @@ import { logger } from '../../utils/logger.js';
 import { launchBrowser, createContext, createPage } from '../../automation/browser.js';
 import { HomePage } from '../../automation/pages/HomePage.js';
 import { ShowtimesPage } from '../../automation/pages/ShowtimesPage.js';
+import { mismatchActionKeyboard } from '../../bot/menus/keyboards.js';
+import { bot } from '../../bot/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -19,6 +22,76 @@ export interface WatchResult {
   theatre?: string;
   showtime?: string;
   error?: string;
+}
+
+interface PreferenceMatchResult {
+  matched: boolean;
+  mismatchType?: 'format' | 'language' | 'screen' | 'time' | 'theatre';
+  error?: string;
+}
+
+function checkPreferenceMatch(
+  showtimePrefs: {
+    preferredFormats?: string[];
+    preferredLanguages?: string[];
+    preferredScreens?: string[];
+    preferredTimes?: string[];
+  },
+  availableOptions: Array<{
+    format: string;
+    language: string;
+    screen?: string;
+    times: string[];
+  }>
+): PreferenceMatchResult {
+  if (availableOptions.length === 0) {
+    return { matched: false, mismatchType: 'theatre', error: 'No showtimes available' };
+  }
+
+  const hasFormat = !showtimePrefs.preferredFormats?.length ||
+    availableOptions.some(opt =>
+      showtimePrefs.preferredFormats!.some(pf =>
+        opt.format.toUpperCase().includes(pf.toUpperCase())
+      )
+    );
+
+  const hasLanguage = !showtimePrefs.preferredLanguages?.length ||
+    availableOptions.some(opt =>
+      showtimePrefs.preferredLanguages!.some(pl =>
+        opt.language.toUpperCase().includes(pl.toUpperCase())
+      )
+    );
+
+  const hasScreen = !showtimePrefs.preferredScreens?.length ||
+    availableOptions.some(opt =>
+      opt.screen && showtimePrefs.preferredScreens!.some(ps =>
+        opt.screen!.toUpperCase().includes(ps.toUpperCase())
+      )
+    );
+
+  const hasTime = !showtimePrefs.preferredTimes?.length ||
+    availableOptions.some(opt =>
+      opt.times.some(t =>
+        showtimePrefs.preferredTimes!.some(pt =>
+          t.includes(pt) || pt.includes(t)
+        )
+      )
+    );
+
+  if (!hasFormat) {
+    return { matched: false, mismatchType: 'format', error: 'Preferred format not available' };
+  }
+  if (!hasLanguage) {
+    return { matched: false, mismatchType: 'language', error: 'Preferred language not available' };
+  }
+  if (!hasScreen) {
+    return { matched: false, mismatchType: 'screen', error: 'Preferred screen type not available' };
+  }
+  if (!hasTime) {
+    return { matched: false, mismatchType: 'time', error: 'Preferred showtime not available' };
+  }
+
+  return { matched: true };
 }
 
 const DEBUG_DIR = 'screenshots/watch-debug';
@@ -154,6 +227,19 @@ export async function processWatchJob(job: Job<WatchJobData>): Promise<WatchResu
     // Click book tickets button
     await homePage.clickBookTickets();
 
+    // Handle language/format dialog if it appears
+    const showtimePrefs = bookingJob.showtimePrefs as {
+      preferredDates?: string[];
+      preferredTimes?: string[];
+      preferredFormats?: string[];
+      preferredLanguages?: string[];
+      preferredScreens?: string[];
+    };
+    await homePage.handleLanguageFormatDialog(
+      showtimePrefs.preferredLanguages,
+      showtimePrefs.preferredFormats
+    );
+
     // Check showtimes page
     const showtimesPage = new ShowtimesPage(page);
 
@@ -174,9 +260,6 @@ export async function processWatchJob(job: Job<WatchJobData>): Promise<WatchResu
       await browser.close();
       return { ticketsFound: false };
     }
-
-    // Check for preferred theatres and dates
-    const showtimePrefs = bookingJob.showtimePrefs as { preferredDates?: string[]; preferredTimes?: string[] };
 
     // Select the preferred date if provided
     if (showtimePrefs.preferredDates?.[0]) {
@@ -235,7 +318,69 @@ export async function processWatchJob(job: Job<WatchJobData>): Promise<WatchResu
       }
     }
 
-    // No tickets found in preferred theatres
+    // No tickets found in preferred theatres - scrape available options
+    const availableOptions = await showtimesPage.scrapeAvailableOptions();
+
+    // Check if any preferences match
+    const showtimePrefsTyped = showtimePrefs as {
+      preferredFormats?: string[];
+      preferredLanguages?: string[];
+      preferredScreens?: string[];
+      preferredTimes?: string[];
+    };
+
+    const matchResult = checkPreferenceMatch(showtimePrefsTyped, availableOptions.options);
+
+    if (!matchResult.matched && availableOptions.options.length > 0) {
+      // Save screenshot for notification
+      const screenshotPath = `${DEBUG_DIR}/${jobId}-mismatch-${Date.now()}.png`;
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+
+      // Set job to awaiting input
+      await jobService.setAwaitingInput(
+        jobId,
+        matchResult.mismatchType || 'unknown',
+        availableOptions,
+        screenshotPath
+      );
+
+      // Send mismatch notification with screenshot and buttons
+      const keyboard = mismatchActionKeyboard(jobId);
+
+      await bot.api.sendPhoto(
+        bookingJob.user.telegramId,
+        new InputFile(screenshotPath),
+        {
+          caption: `<b>Preference Mismatch</b>\n\n` +
+            `Movie: ${bookingJob.movieName}\n\n` +
+            `<b>Wanted:</b>\n` +
+            (showtimePrefsTyped.preferredFormats?.length ? `Format: ${showtimePrefsTyped.preferredFormats.join(', ')}\n` : '') +
+            (showtimePrefsTyped.preferredLanguages?.length ? `Language: ${showtimePrefsTyped.preferredLanguages.join(', ')}\n` : '') +
+            (showtimePrefsTyped.preferredScreens?.length ? `Screen: ${showtimePrefsTyped.preferredScreens.join(', ')}\n` : '') +
+            (showtimePrefsTyped.preferredTimes?.length ? `Time: ${showtimePrefsTyped.preferredTimes.join(', ')}\n` : '') +
+            `\n<b>Issue:</b> ${matchResult.error}\n\n` +
+            `<b>Available:</b>\n` +
+            availableOptions.options.slice(0, 5).map(opt =>
+              `• ${opt.language} ${opt.format}${opt.screen ? ` (${opt.screen})` : ''} - ${opt.times.slice(0, 3).join(', ')}`
+            ).join('\n') +
+            `\n\nRespond within 15 minutes or job will be paused.`,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        }
+      );
+
+      logger.info('Preference mismatch detected, awaiting user input', {
+        jobId,
+        mismatchType: matchResult.mismatchType,
+      });
+
+      await context.close();
+      await browser.close();
+
+      return { ticketsFound: false, error: 'Awaiting user input for preference mismatch' };
+    }
+
+    // Original behavior: no tickets in preferred theatres
     await context.close();
     await browser.close();
 
