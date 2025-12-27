@@ -259,3 +259,51 @@ export function contactKeyboard(hasContact: boolean): InlineKeyboard {
   kb.text('Back to Settings', 'settings:main');
   return kb;
 }
+
+export function mismatchActionKeyboard(jobId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('Keep Trying', `mismatch:keep:${jobId}`)
+    .text('Book Available', `mismatch:book:${jobId}`)
+    .row()
+    .text('Update Prefs', `mismatch:update:${jobId}`)
+    .text('Cancel Job', `mismatch:cancel:${jobId}`);
+}
+
+export function mismatchOptionsKeyboard(
+  jobId: string,
+  options: Array<{ language: string; format: string; screen?: string }>
+): InlineKeyboard {
+  const kb = new InlineKeyboard();
+
+  options.slice(0, 6).forEach((opt, index) => {
+    const label = `${opt.language} ${opt.format}${opt.screen ? ` (${opt.screen})` : ''}`;
+    kb.text(label, `mismatch:select:${jobId}:${index}`);
+    if ((index + 1) % 2 === 0) kb.row();
+  });
+
+  kb.row().text('Back', `mismatch:back:${jobId}`);
+  return kb;
+}
+
+export function mismatchTimesKeyboard(
+  jobId: string,
+  times: string[],
+  optionIndex: number
+): InlineKeyboard {
+  const kb = new InlineKeyboard();
+
+  times.slice(0, 8).forEach((time, index) => {
+    kb.text(time, `mismatch:time:${jobId}:${optionIndex}:${index}`);
+    if ((index + 1) % 4 === 0) kb.row();
+  });
+
+  kb.row().text('Back', `mismatch:update:${jobId}`);
+  return kb;
+}
+
+export function pausedJobKeyboard(jobId: string): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('Resume (Keep Trying)', `mismatch:keep:${jobId}`)
+    .row()
+    .text('Cancel Job', `mismatch:cancel:${jobId}`);
+}

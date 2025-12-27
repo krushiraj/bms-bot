@@ -12,7 +12,12 @@ export type NotificationType =
   | 'booking_failed'
   | 'job_completed'
   | 'job_failed'
-  | 'job_expired';
+  | 'job_expired'
+  | 'preference_mismatch'
+  | 'theatre_not_found'
+  | 'movie_not_found'
+  | 'job_paused'
+  | 'job_resumed';
 
 // Important notifications that are always sent (success/failure outcomes)
 const IMPORTANT_NOTIFICATIONS: NotificationType[] = [
@@ -34,6 +39,21 @@ export interface NotificationPayload {
   error?: string;
   totalAmount?: number;
   screenshotPath?: string;
+  wanted?: {
+    formats?: string[];
+    languages?: string[];
+    screens?: string[];
+    times?: string[];
+    theatres?: string[];
+  };
+  available?: Array<{
+    theatre: string;
+    language: string;
+    format: string;
+    screen?: string;
+    times: string[];
+  }>;
+  mismatchType?: string;
 }
 
 /**
@@ -235,6 +255,73 @@ export class NotificationService {
           `Job ID: <code>${jobIdShort}</code>\n` +
           `The job has expired without finding tickets.\n` +
           `Create a new job if you still want to book.`
+        );
+
+      case 'preference_mismatch': {
+        let msg = `<b>Preference Mismatch</b>\n\n`;
+        msg += `Job ID: <code>${jobIdShort}</code>\n`;
+        msg += `Movie: ${movieName || 'N/A'}\n\n`;
+
+        if (payload.wanted) {
+          msg += `<b>Wanted:</b>\n`;
+          if (payload.wanted.formats?.length) msg += `Format: ${payload.wanted.formats.join(', ')}\n`;
+          if (payload.wanted.languages?.length) msg += `Language: ${payload.wanted.languages.join(', ')}\n`;
+          if (payload.wanted.screens?.length) msg += `Screen: ${payload.wanted.screens.join(', ')}\n`;
+          if (payload.wanted.times?.length) msg += `Time: ${payload.wanted.times.join(', ')}\n`;
+          if (payload.wanted.theatres?.length) msg += `Theatre: ${payload.wanted.theatres.join(', ')}\n`;
+          msg += '\n';
+        }
+
+        msg += `<b>Not found:</b> ${error || 'Preferred options not available'}\n\n`;
+
+        if (payload.available && payload.available.length > 0) {
+          msg += `<b>Available options:</b>\n`;
+          for (const opt of payload.available.slice(0, 5)) {
+            const times = opt.times.slice(0, 3).join(', ');
+            const more = opt.times.length > 3 ? ` +${opt.times.length - 3} more` : '';
+            msg += `• ${opt.language} ${opt.format}${opt.screen ? ` (${opt.screen})` : ''} - ${times}${more}\n`;
+          }
+          msg += '\n';
+        }
+
+        msg += `Respond within 15 minutes or job will be paused.`;
+        return msg;
+      }
+
+      case 'theatre_not_found':
+        return (
+          `<b>Theatre Not Found</b>\n\n` +
+          `Job ID: <code>${jobIdShort}</code>\n` +
+          `Movie: ${movieName || 'N/A'}\n` +
+          `Searched for: ${payload.wanted?.theatres?.join(', ') || theatre || 'N/A'}\n\n` +
+          `The specified theatres don't have showtimes for this movie.\n\n` +
+          `Respond within 15 minutes or job will be paused.`
+        );
+
+      case 'movie_not_found':
+        return (
+          `<b>Movie Not Found</b>\n\n` +
+          `Job ID: <code>${jobIdShort}</code>\n` +
+          `Searched for: ${movieName || 'N/A'}\n\n` +
+          `This movie is not currently showing on BookMyShow.\n` +
+          `Please check the movie name and try again.`
+        );
+
+      case 'job_paused':
+        return (
+          `<b>Job Paused</b>\n\n` +
+          `Job ID: <code>${jobIdShort}</code>\n` +
+          `Movie: ${movieName || 'N/A'}\n\n` +
+          `No response received within 15 minutes.\n` +
+          `Tap a button below to resume or cancel.`
+        );
+
+      case 'job_resumed':
+        return (
+          `<b>Job Resumed</b>\n\n` +
+          `Job ID: <code>${jobIdShort}</code>\n` +
+          `Movie: ${movieName || 'N/A'}\n\n` +
+          `Continuing to watch for tickets...`
         );
 
       default:
