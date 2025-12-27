@@ -45,6 +45,12 @@ import {
   showTheatrePrompt,
   showDateSelection,
   toggleDateSelection,
+  showFormatSelection,
+  toggleFormatSelection,
+  showLanguageSelection,
+  toggleLanguageSelection,
+  showScreenSelection,
+  toggleScreenSelection,
 } from './menus/index.js';
 import { userService } from '../services/userService.js';
 import { giftCardService } from '../services/giftCardService.js';
@@ -303,13 +309,73 @@ bot.on('callback_query:data', async (ctx) => {
     } else if (data === 'date:any') {
       ctx.session.selectedDates = [];
       ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredDates: undefined };
-      ctx.session.step = 'job_time';
-      await handleTimeSelection(ctx);
+      ctx.session.step = 'job_format';
+      ctx.session.selectedFormats = [];
+      await showFormatSelection(ctx);
     } else if (data === 'date:done') {
       const selectedDates = ctx.session.selectedDates || [];
       ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredDates: selectedDates };
+      ctx.session.step = 'job_format';
+      ctx.session.selectedFormats = [];
+      await showFormatSelection(ctx);
+    }
+
+    // Format selection
+    else if (data.startsWith('format:toggle:')) {
+      await toggleFormatSelection(ctx, data.replace('format:toggle:', ''));
+    } else if (data === 'format:any') {
+      ctx.session.selectedFormats = [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredFormats: undefined };
+      ctx.session.step = 'job_lang';
+      ctx.session.selectedLanguages = [];
+      await showLanguageSelection(ctx);
+    } else if (data === 'format:done') {
+      const selectedFormats = ctx.session.selectedFormats || [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredFormats: selectedFormats.length > 0 ? selectedFormats : undefined };
+      ctx.session.step = 'job_lang';
+      ctx.session.selectedLanguages = [];
+      await showLanguageSelection(ctx);
+    } else if (data === 'job:back:format') {
+      ctx.session.step = 'job_format';
+      await showFormatSelection(ctx);
+    }
+
+    // Language selection
+    else if (data.startsWith('lang:toggle:')) {
+      await toggleLanguageSelection(ctx, data.replace('lang:toggle:', ''));
+    } else if (data === 'lang:any') {
+      ctx.session.selectedLanguages = [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredLanguages: undefined };
+      ctx.session.step = 'job_screen';
+      ctx.session.selectedScreens = [];
+      await showScreenSelection(ctx);
+    } else if (data === 'lang:done') {
+      const selectedLanguages = ctx.session.selectedLanguages || [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredLanguages: selectedLanguages.length > 0 ? selectedLanguages : undefined };
+      ctx.session.step = 'job_screen';
+      ctx.session.selectedScreens = [];
+      await showScreenSelection(ctx);
+    } else if (data === 'job:back:lang') {
+      ctx.session.step = 'job_lang';
+      await showLanguageSelection(ctx);
+    }
+
+    // Screen selection
+    else if (data.startsWith('screen:toggle:')) {
+      await toggleScreenSelection(ctx, data.replace('screen:toggle:', ''));
+    } else if (data === 'screen:any') {
+      ctx.session.selectedScreens = [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredScreens: undefined };
       ctx.session.step = 'job_time';
       await handleTimeSelection(ctx);
+    } else if (data === 'screen:done') {
+      const selectedScreens = ctx.session.selectedScreens || [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredScreens: selectedScreens.length > 0 ? selectedScreens : undefined };
+      ctx.session.step = 'job_time';
+      await handleTimeSelection(ctx);
+    } else if (data === 'job:back:screen') {
+      ctx.session.step = 'job_screen';
+      await showScreenSelection(ctx);
     } else if (data === 'job:back:dates') {
       ctx.session.step = 'job_date';
       await showDateSelection(ctx);
@@ -381,7 +447,7 @@ async function handleTimeSelection(ctx: MyContext): Promise<void> {
     .row()
     .text('Any Time', 'time:any')
     .row()
-    .text('Back', 'job:back:dates')
+    .text('Back', 'job:back:screen')
     .text('Cancel', 'menu:main');
 
   await ctx.editMessageText(
@@ -389,8 +455,11 @@ async function handleTimeSelection(ctx: MyContext): Promise<void> {
     `Movie: *${draft.movieName}*\n` +
     `City: *${draft.city}*\n` +
     `Theatre(s): *${draft.theatres?.join(', ')}*\n` +
-    `Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n\n` +
-    `*Step 5/6: Preferred Time*\n\n` +
+    `Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n` +
+    `Format: *${draft.preferredFormats?.join(', ') || 'Any'}*\n` +
+    `Language: *${draft.preferredLanguages?.join(', ') || 'Any'}*\n` +
+    `Screen: *${draft.preferredScreens?.join(', ') || 'Any'}*\n\n` +
+    `*Step 8/8: Preferred Time*\n\n` +
     `Select your preferred showtime:`,
     { parse_mode: 'Markdown', reply_markup: timeKeyboard }
   );
