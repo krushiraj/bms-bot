@@ -9,6 +9,9 @@ import {
   mainMenuKeyboard,
   cityKeyboard,
   dateKeyboard,
+  formatKeyboard,
+  languageKeyboard,
+  screenKeyboard,
   jobListKeyboard,
   jobDetailKeyboard,
   confirmCancelJobKeyboard,
@@ -455,4 +458,107 @@ export async function toggleDateSelection(ctx: MyContext, day: string): Promise<
   ctx.session.selectedDates = selectedDates;
   await ctx.answerCallbackQuery();
   await showDateSelection(ctx);
+}
+
+// ============ FORMAT SELECTION ============
+
+export async function showFormatSelection(ctx: MyContext): Promise<void> {
+  const draft = ctx.session.jobDraft || {};
+  const selectedFormats = ctx.session.selectedFormats || [];
+
+  const text = `*Create New Booking Job*\n\n` +
+    `Movie: *${draft.movieName}*\n` +
+    `City: *${draft.city}*\n` +
+    `Theatre(s): *${draft.theatres?.join(', ')}*\n` +
+    `Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n\n` +
+    `*Step 5/8: Preferred Format*\n\n` +
+    `Select format(s), then tap Done:` +
+    (selectedFormats.length > 0 ? `\n\nSelected: ${selectedFormats.join(', ')}` : '');
+
+  await editOrSend(ctx, text, formatKeyboard(selectedFormats));
+}
+
+export async function toggleFormatSelection(ctx: MyContext, format: string): Promise<void> {
+  const selectedFormats = ctx.session.selectedFormats || [];
+
+  const index = selectedFormats.indexOf(format);
+  if (index > -1) {
+    selectedFormats.splice(index, 1);
+  } else {
+    selectedFormats.push(format);
+  }
+
+  ctx.session.selectedFormats = selectedFormats;
+  await ctx.answerCallbackQuery();
+  await showFormatSelection(ctx);
+}
+
+// ============ LANGUAGE SELECTION ============
+
+export async function showLanguageSelection(ctx: MyContext): Promise<void> {
+  const draft = ctx.session.jobDraft || {};
+  const selectedLanguages = ctx.session.selectedLanguages || [];
+
+  const text = `*Create New Booking Job*\n\n` +
+    `Movie: *${draft.movieName}*\n` +
+    `City: *${draft.city}*\n` +
+    `Theatre(s): *${draft.theatres?.join(', ')}*\n` +
+    `Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n` +
+    `Format: *${draft.preferredFormats?.join(', ') || 'Any'}*\n\n` +
+    `*Step 6/8: Preferred Language*\n\n` +
+    `Select language(s), then tap Done:` +
+    (selectedLanguages.length > 0 ? `\n\nSelected: ${selectedLanguages.join(', ')}` : '');
+
+  await editOrSend(ctx, text, languageKeyboard(selectedLanguages));
+}
+
+export async function toggleLanguageSelection(ctx: MyContext, language: string): Promise<void> {
+  const selectedLanguages = ctx.session.selectedLanguages || [];
+
+  const index = selectedLanguages.indexOf(language);
+  if (index > -1) {
+    selectedLanguages.splice(index, 1);
+  } else {
+    selectedLanguages.push(language);
+  }
+
+  ctx.session.selectedLanguages = selectedLanguages;
+  await ctx.answerCallbackQuery();
+  await showLanguageSelection(ctx);
+}
+
+// ============ SCREEN SELECTION ============
+
+export async function showScreenSelection(ctx: MyContext): Promise<void> {
+  const draft = ctx.session.jobDraft || {};
+  const selectedScreens = ctx.session.selectedScreens || [];
+
+  const text = `*Create New Booking Job*\n\n` +
+    `Movie: *${draft.movieName}*\n` +
+    `City: *${draft.city}*\n` +
+    `Theatre(s): *${draft.theatres?.join(', ')}*\n` +
+    `Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n` +
+    `Format: *${draft.preferredFormats?.join(', ') || 'Any'}*\n` +
+    `Language: *${draft.preferredLanguages?.join(', ') || 'Any'}*\n\n` +
+    `*Step 7/8: Screen Preference*\n\n` +
+    `Select preferred screen(s), then tap Done:\n` +
+    `_(These are prioritized when booking)_` +
+    (selectedScreens.length > 0 ? `\n\nSelected: ${selectedScreens.join(', ')}` : '');
+
+  await editOrSend(ctx, text, screenKeyboard(selectedScreens));
+}
+
+export async function toggleScreenSelection(ctx: MyContext, screen: string): Promise<void> {
+  const selectedScreens = ctx.session.selectedScreens || [];
+
+  const index = selectedScreens.indexOf(screen);
+  if (index > -1) {
+    selectedScreens.splice(index, 1);
+  } else {
+    selectedScreens.push(screen);
+  }
+
+  ctx.session.selectedScreens = selectedScreens;
+  await ctx.answerCallbackQuery();
+  await showScreenSelection(ctx);
 }
