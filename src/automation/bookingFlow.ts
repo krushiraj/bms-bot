@@ -171,6 +171,16 @@ export class BookingFlow {
         logger.warn('Book tickets button not found, continuing anyway');
       }
 
+      // Step 1.6: Handle language/format dialog if it appears
+      // This dialog shows for movies with multiple language/format versions
+      const dialogHandled = await homePage.handleLanguageFormatDialog(
+        config.preferredLanguages,
+        config.preferredFormats
+      );
+      if (dialogHandled) {
+        await this.saveDebugInfo('05b-after-language-format-selection');
+      }
+
       // Step 2: Select showtime
       const showtimesPage = new ShowtimesPage(this.page);
       const hasShowtimes = await showtimesPage.waitForShowtimes();
