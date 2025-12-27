@@ -1,4 +1,4 @@
-import { CommandContext, Context } from 'grammy';
+import { CommandContext, Context, InlineKeyboard } from 'grammy';
 import { JobStatus } from '@prisma/client';
 import { jobService } from '../../worker/jobService.js';
 import { notificationService } from '../../worker/notificationService.js';
@@ -8,7 +8,19 @@ import { MyContext, JobDraft } from '../index.js';
 
 const CITIES = ['hyderabad', 'bangalore', 'mumbai', 'delhi', 'chennai', 'kolkata', 'pune'];
 const DEFAULT_THEATRES = ['AMB Cinemas', 'PVR', 'INOX', 'Cinepolis'];
-const DEFAULT_TIMES = ['10:00 AM', '1:00 PM', '4:00 PM', '7:00 PM', '10:00 PM'];
+
+// BMS-style time ranges (including midnight premieres)
+const TIME_RANGES = {
+  midnight: { label: '🌌 Midnight', times: ['12:00 AM', '1:00 AM', '2:00 AM', '3:00 AM'] },
+  early: { label: '🌄 Early (4-8 AM)', times: ['4:00 AM', '5:00 AM', '6:00 AM', '7:00 AM', '8:00 AM'] },
+  morning: { label: '🌅 Morning', times: ['9:00 AM', '10:00 AM', '11:00 AM'] },
+  afternoon: { label: '☀️ Afternoon', times: ['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'] },
+  evening: { label: '🌆 Evening', times: ['4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'] },
+  night: { label: '🌙 Night', times: ['8:00 PM', '9:00 PM', '10:00 PM', '11:00 PM'] },
+};
+
+// Seat count options
+const SEAT_COUNTS = [1, 2, 3, 4, 5, 6];
 
 /**
  * Start creating a new booking job (interactive flow)
@@ -465,82 +477,24 @@ export async function handleJobMessage(ctx: MyContext): Promise<boolean> {
         ctx.session.jobDraft = draft;
         ctx.session.step = 'job_time';
 
+        // Show time range buttons (including midnight premieres for release days)
+        const timeKeyboard = new InlineKeyboard()
+          .text(TIME_RANGES.midnight.label, 'time:midnight')
+          .text(TIME_RANGES.early.label, 'time:early')
+          .row()
+          .text(TIME_RANGES.morning.label, 'time:morning')
+          .text(TIME_RANGES.afternoon.label, 'time:afternoon')
+          .row()
+          .text(TIME_RANGES.evening.label, 'time:evening')
+          .text(TIME_RANGES.night.label, 'time:night')
+          .row()
+          .text('🕐 Any Time', 'time:any');
+
         await ctx.reply(
           `✅ Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n\n` +
-          `*Step 5/5: Time & Seats*\n` +
-          `Preferred showtimes and seat count?\n\n` +
-          `Format: <time1>, <time2> | <seat count>\n\n` +
-          `Example: 7:00 PM, 9:00 PM | 2\n\n` +
-          `Or type "any | 2" for any time with 2 seats:`,
-          { parse_mode: 'Markdown' }
-        );
-        return true;
-
-      case 'job_time':
-        const parts = text.split('|').map(p => p.trim());
-        const timePart = parts[0] || '';
-        const seatPart = parts[1] || '2';
-
-        if (timePart.toLowerCase() !== 'any') {
-          draft.preferredTimes = timePart.split(',').map(t => t.trim()).filter(Boolean);
-        }
-        draft.seatCount = parseInt(seatPart, 10) || 2;
-
-        if (draft.seatCount < 1 || draft.seatCount > 10) {
-          await ctx.reply('Seat count must be between 1 and 10. Please try again.');
-          return true;
-        }
-
-        // Create the job
-        const user = await userService.getOrCreate(telegramId);
-        const now = new Date();
-        const watchUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-        const job = await jobService.createJob({
-          userId: user.id,
-          movieName: draft.movieName || 'Unknown',
-          city: draft.city || 'hyderabad',
-          watchFromDate: now,
-          watchUntilDate: watchUntil,
-          theatres: draft.theatres || DEFAULT_THEATRES,
-          showtimePrefs: {
-            preferredDates: draft.preferredDates,
-            preferredTimes: draft.preferredTimes,
-          },
-          seatPrefs: {
-            count: draft.seatCount,
-            avoidBottomRows: 3,
-            preferCenter: true,
-            needAdjacent: true,
-          },
-        });
-
-        // Clear session
-        ctx.session.step = undefined;
-        ctx.session.jobDraft = undefined;
-
-        logger.info('Interactive job created', { userId: user.id, jobId: job.id });
-
-        // Send notification
-        await notificationService.notify(telegramId, {
-          type: 'job_created',
-          jobId: job.id,
-          movieName: draft.movieName,
-          theatre: draft.theatres?.join(', '),
-        });
-
-        await ctx.reply(
-          `🎉 *Booking Job Created!*\n\n` +
-          `Job ID: \`${job.id.substring(0, 8)}\`\n` +
-          `Movie: ${draft.movieName}\n` +
-          `City: ${draft.city}\n` +
-          `Theatre(s): ${draft.theatres?.join(', ')}\n` +
-          `Date(s): ${draft.preferredDates?.join(', ') || 'Any'}\n` +
-          `Time(s): ${draft.preferredTimes?.join(', ') || 'Any'}\n` +
-          `Seats: ${draft.seatCount}\n\n` +
-          `I'll monitor for tickets and book automatically!\n\n` +
-          `Use /myjobs to see all your jobs.`,
-          { parse_mode: 'Markdown' }
+          `*Step 5/6: Preferred Time*\n` +
+          `Select your preferred showtime:`,
+          { parse_mode: 'Markdown', reply_markup: timeKeyboard }
         );
         return true;
 
@@ -554,5 +508,128 @@ export async function handleJobMessage(ctx: MyContext): Promise<boolean> {
     ctx.session.jobDraft = undefined;
     await ctx.reply('Something went wrong. Please start over with /newjob');
     return true;
+  }
+}
+
+/**
+ * Handle time range selection callback
+ */
+export async function handleTimeCallback(ctx: MyContext): Promise<void> {
+  const callbackData = ctx.callbackQuery?.data;
+  if (!callbackData?.startsWith('time:')) return;
+
+  const telegramId = ctx.from?.id.toString();
+  if (!telegramId) return;
+
+  const timeRange = callbackData.replace('time:', '') as keyof typeof TIME_RANGES | 'any';
+  const draft: JobDraft = ctx.session.jobDraft || {};
+
+  // Set preferred times based on selection
+  if (timeRange === 'any') {
+    draft.preferredTimes = undefined;
+  } else {
+    draft.preferredTimes = TIME_RANGES[timeRange].times;
+  }
+
+  ctx.session.jobDraft = draft;
+  ctx.session.step = 'job_seats';
+
+  // Answer callback to remove loading state
+  await ctx.answerCallbackQuery();
+
+  // Show seat count buttons
+  const seatKeyboard = new InlineKeyboard();
+  SEAT_COUNTS.forEach((count, i) => {
+    seatKeyboard.text(`${count} 🎫`, `seats:${count}`);
+    if ((i + 1) % 3 === 0) seatKeyboard.row();
+  });
+
+  const timeLabel = timeRange === 'any'
+    ? 'Any Time'
+    : TIME_RANGES[timeRange].label;
+
+  await ctx.editMessageText(
+    `✅ Time: *${timeLabel}*\n\n` +
+    `*Step 6/6: Number of Seats*\n` +
+    `How many tickets do you need?`,
+    { parse_mode: 'Markdown', reply_markup: seatKeyboard }
+  );
+}
+
+/**
+ * Handle seat count selection callback and create the job
+ */
+export async function handleSeatsCallback(ctx: MyContext): Promise<void> {
+  const callbackData = ctx.callbackQuery?.data;
+  if (!callbackData?.startsWith('seats:')) return;
+
+  const telegramId = ctx.from?.id.toString();
+  if (!telegramId) return;
+
+  const seatCount = parseInt(callbackData.replace('seats:', ''), 10);
+  const draft: JobDraft = ctx.session.jobDraft || {};
+  draft.seatCount = seatCount;
+
+  // Answer callback
+  await ctx.answerCallbackQuery({ text: `Selected ${seatCount} seats` });
+
+  try {
+    // Create the job
+    const user = await userService.getOrCreate(telegramId);
+    const now = new Date();
+    const watchUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const job = await jobService.createJob({
+      userId: user.id,
+      movieName: draft.movieName || 'Unknown',
+      city: draft.city || 'hyderabad',
+      watchFromDate: now,
+      watchUntilDate: watchUntil,
+      theatres: draft.theatres || DEFAULT_THEATRES,
+      showtimePrefs: {
+        preferredDates: draft.preferredDates,
+        preferredTimes: draft.preferredTimes,
+      },
+      seatPrefs: {
+        count: seatCount,
+        avoidBottomRows: 3,
+        preferCenter: true,
+        needAdjacent: true,
+      },
+    });
+
+    // Clear session
+    ctx.session.step = undefined;
+    ctx.session.jobDraft = undefined;
+
+    logger.info('Interactive job created', { userId: user.id, jobId: job.id });
+
+    // Send notification
+    await notificationService.notify(telegramId, {
+      type: 'job_created',
+      jobId: job.id,
+      movieName: draft.movieName,
+      theatre: draft.theatres?.join(', '),
+    });
+
+    // Update the message with job details
+    await ctx.editMessageText(
+      `🎉 *Booking Job Created!*\n\n` +
+      `Job ID: \`${job.id.substring(0, 8)}\`\n` +
+      `Movie: ${draft.movieName}\n` +
+      `City: ${draft.city}\n` +
+      `Theatre(s): ${draft.theatres?.join(', ')}\n` +
+      `Date(s): ${draft.preferredDates?.join(', ') || 'Any'}\n` +
+      `Time(s): ${draft.preferredTimes?.join(', ') || 'Any'}\n` +
+      `Seats: ${seatCount}\n\n` +
+      `I'll monitor for tickets and book automatically!\n\n` +
+      `Use /myjobs to see all your jobs.`,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (error) {
+    logger.error('Error creating job from callback', { error, telegramId });
+    ctx.session.step = undefined;
+    ctx.session.jobDraft = undefined;
+    await ctx.editMessageText('Something went wrong. Please start over with /newjob');
   }
 }

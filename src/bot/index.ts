@@ -17,6 +17,8 @@ import {
   cancelJobCommand,
   setContactCommand,
   handleJobMessage,
+  handleTimeCallback,
+  handleSeatsCallback,
 } from './commands/jobs.js';
 
 export interface JobDraft {
@@ -75,6 +77,18 @@ bot.command('setcontact', setContactCommand);
 bot.on('message:text', async (ctx, next) => {
   const handled = await handleJobMessage(ctx);
   if (!handled) {
+    await next();
+  }
+});
+
+// Handle callback queries for job creation buttons
+bot.on('callback_query:data', async (ctx, next) => {
+  const data = ctx.callbackQuery.data;
+  if (data.startsWith('time:')) {
+    await handleTimeCallback(ctx);
+  } else if (data.startsWith('seats:')) {
+    await handleSeatsCallback(ctx);
+  } else {
     await next();
   }
 });
