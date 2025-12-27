@@ -67,6 +67,9 @@ export async function processBookingJob(job: Job<BookingJobData>): Promise<Booki
   const showtimePrefs = bookingJob.showtimePrefs as {
     preferredDates?: string[];
     preferredTimes?: string[];
+    preferredFormats?: string[];
+    preferredLanguages?: string[];
+    preferredScreens?: string[];
   };
 
   const config: BookingConfig = {
@@ -74,6 +77,9 @@ export async function processBookingJob(job: Job<BookingJobData>): Promise<Booki
     city: bookingJob.city,
     theatres: bookingJob.theatres,
     preferredTimes: showtimePrefs.preferredTimes || [],
+    preferredFormats: showtimePrefs.preferredFormats,
+    preferredLanguages: showtimePrefs.preferredLanguages,
+    preferredScreens: showtimePrefs.preferredScreens,
     date: showtimePrefs.preferredDates?.[0],
     seatPrefs,
     userEmail: bookingJob.user.email || '',
