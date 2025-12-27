@@ -473,72 +473,28 @@ export async function handleJobMessage(ctx: MyContext): Promise<boolean> {
         ctx.session.jobDraft = draft;
         ctx.session.step = 'job_city';
 
-        await ctx.reply(
-          `✅ Movie: *${text}*\n\n` +
-          `*Step 2/5: City*\n` +
-          `Which city?\n\n` +
-          `Options: ${CITIES.join(', ')}\n\n` +
-          `Or type your city name:`,
-          { parse_mode: 'Markdown' }
-        );
+        // Show city selection with buttons
+        const { showCitySelection } = await import('../menus/index.js');
+        await showCitySelection(ctx);
         return true;
 
-      case 'job_city':
+      case 'job_city_text':
         draft.city = text.toLowerCase();
         ctx.session.jobDraft = draft;
         ctx.session.step = 'job_theatre';
 
-        await ctx.reply(
-          `✅ City: *${text}*\n\n` +
-          `*Step 3/5: Theatre*\n` +
-          `Which theatre(s)? (comma separated)\n\n` +
-          `Popular: ${DEFAULT_THEATRES.join(', ')}\n\n` +
-          `Example: AMB Cinemas, PVR Forum`,
-          { parse_mode: 'Markdown' }
-        );
+        const { showTheatrePrompt } = await import('../menus/index.js');
+        await showTheatrePrompt(ctx);
         return true;
 
       case 'job_theatre':
         draft.theatres = text.split(',').map(t => t.trim()).filter(Boolean);
         ctx.session.jobDraft = draft;
         ctx.session.step = 'job_date';
+        ctx.session.selectedDates = [];
 
-        await ctx.reply(
-          `✅ Theatre(s): *${draft.theatres.join(', ')}*\n\n` +
-          `*Step 4/5: Date*\n` +
-          `Which date(s)? (day of month, comma separated)\n\n` +
-          `Example: 28, 29, 30\n\n` +
-          `Or type "any" for any available date:`,
-          { parse_mode: 'Markdown' }
-        );
-        return true;
-
-      case 'job_date':
-        if (text.toLowerCase() !== 'any') {
-          draft.preferredDates = text.split(',').map(d => d.trim()).filter(Boolean);
-        }
-        ctx.session.jobDraft = draft;
-        ctx.session.step = 'job_time';
-
-        // Show time range buttons (including midnight premieres for release days)
-        const timeKeyboard = new InlineKeyboard()
-          .text(TIME_RANGES.midnight.label, 'time:midnight')
-          .text(TIME_RANGES.early.label, 'time:early')
-          .row()
-          .text(TIME_RANGES.morning.label, 'time:morning')
-          .text(TIME_RANGES.afternoon.label, 'time:afternoon')
-          .row()
-          .text(TIME_RANGES.evening.label, 'time:evening')
-          .text(TIME_RANGES.night.label, 'time:night')
-          .row()
-          .text('🕐 Any Time', 'time:any');
-
-        await ctx.reply(
-          `✅ Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n\n` +
-          `*Step 5/6: Preferred Time*\n` +
-          `Select your preferred showtime:`,
-          { parse_mode: 'Markdown', reply_markup: timeKeyboard }
-        );
+        const { showDateSelection } = await import('../menus/index.js');
+        await showDateSelection(ctx);
         return true;
 
       default:
