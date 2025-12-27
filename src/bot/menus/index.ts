@@ -412,7 +412,7 @@ export async function showNewJobStart(ctx: MyContext): Promise<void> {
   ctx.session.jobDraft = {};
 
   const text = `*Create New Booking Job*\n\n` +
-    `*Step 1/5: Movie Name*\n\n` +
+    `*Step 1/8: Movie Name*\n\n` +
     `What movie do you want to book?\n\n` +
     `Type the movie name:`;
 
@@ -424,7 +424,7 @@ export async function showCitySelection(ctx: MyContext): Promise<void> {
 
   const text = `*Create New Booking Job*\n\n` +
     `Movie: *${draft.movieName}*\n\n` +
-    `*Step 2/5: City*\n\n` +
+    `*Step 2/8: City*\n\n` +
     `Select your city:`;
 
   await editOrSend(ctx, text, cityKeyboard());
@@ -438,7 +438,7 @@ export async function showTheatrePrompt(ctx: MyContext): Promise<void> {
   const text = `*Create New Booking Job*\n\n` +
     `Movie: *${draft.movieName}*\n` +
     `City: *${draft.city}*\n\n` +
-    `*Step 3/5: Theatre(s)*\n\n` +
+    `*Step 3/8: Theatre(s)*\n\n` +
     `Which theatre(s)? (comma separated)\n\n` +
     `Popular: AMB Cinemas, PVR, INOX, Cinepolis\n\n` +
     `Type theatre names:`;
@@ -457,7 +457,7 @@ export async function showDateSelection(ctx: MyContext): Promise<void> {
     `Movie: *${draft.movieName}*\n` +
     `City: *${draft.city}*\n` +
     `Theatre(s): *${draft.theatres?.join(', ')}*\n\n` +
-    `*Step 4/5: Preferred Date*\n\n` +
+    `*Step 4/8: Preferred Date*\n\n` +
     `Select date(s), then tap Done:` +
     (selectedDates.length > 0 ? `\n\nSelected: ${selectedDates.join(', ')}` : '');
 
