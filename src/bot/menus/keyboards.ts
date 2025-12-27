@@ -179,6 +179,11 @@ export function jobListKeyboard(jobs: Array<{ id: string; movieName: string; sta
     WATCHING: '👀',
     BOOKING: '🎫',
     AWAITING_CONSENT: '❓',
+    AWAITING_INPUT: '⚠️',
+    PAUSED: '⏸️',
+    SUCCESS: '✅',
+    FAILED: '❌',
+    CANCELLED: '🚫',
   };
 
   for (const job of jobs.slice(0, 6)) {

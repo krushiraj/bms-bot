@@ -83,6 +83,11 @@ export async function showJobsList(ctx: MyContext): Promise<void> {
     WATCHING: '👀',
     BOOKING: '🎫',
     AWAITING_CONSENT: '❓',
+    AWAITING_INPUT: '⚠️',
+    PAUSED: '⏸️',
+    SUCCESS: '✅',
+    FAILED: '❌',
+    CANCELLED: '🚫',
   };
 
   let text = `*Your Booking Jobs*\n\n`;
@@ -117,6 +122,11 @@ export async function showJobDetail(ctx: MyContext, jobId: string): Promise<void
     WATCHING: '👀',
     BOOKING: '🎫',
     AWAITING_CONSENT: '❓',
+    AWAITING_INPUT: '⚠️',
+    PAUSED: '⏸️',
+    SUCCESS: '✅',
+    FAILED: '❌',
+    CANCELLED: '🚫',
   };
 
   const prefs = job.showtimePrefs as {
@@ -155,7 +165,30 @@ export async function showJobDetail(ctx: MyContext, jobId: string): Promise<void
     `${emoji} Status: ${job.status}\n\n` +
     `Watch until: ${watchUntil}`;
 
-  await editOrSend(ctx, text, jobDetailKeyboard(jobId));
+  // Add status-specific message
+  let statusMessage = '';
+  if (job.status === 'AWAITING_INPUT') {
+    statusMessage = '\n\n⚠️ *Action Required:* Please respond to the preference mismatch notification.';
+  } else if (job.status === 'PAUSED') {
+    statusMessage = '\n\n⏸️ *Status:* Job is paused. Resume or cancel to continue.';
+  }
+
+  text += statusMessage;
+
+  // For PAUSED jobs, show Resume button instead of normal Cancel button
+  let keyboard;
+  if (job.status === 'PAUSED') {
+    keyboard = new InlineKeyboard()
+      .text('▶️ Resume Job', `mismatch:keep:${jobId}`)
+      .row()
+      .text('🚫 Cancel Job', `job:cancel:${jobId}`)
+      .row()
+      .text('◀️ Back to Jobs', 'menu:jobs');
+  } else {
+    keyboard = jobDetailKeyboard(jobId);
+  }
+
+  await editOrSend(ctx, text, keyboard);
 }
 
 export async function showCancelJobConfirm(ctx: MyContext, jobId: string): Promise<void> {
