@@ -24,6 +24,30 @@ import {
   notificationsCommand,
   handleNotificationCallback,
 } from './commands/settings.js';
+import {
+  showMainMenu,
+  showJobsList,
+  showJobDetail,
+  showCancelJobConfirm,
+  cancelJob,
+  showCardsList,
+  showCardDetail,
+  showRemoveCardConfirm,
+  removeCard,
+  showAddCardPrompt,
+  showSettings,
+  showNotifications,
+  toggleNotification,
+  showContactInfo,
+  showContactPrompt,
+  showNewJobStart,
+  showCitySelection,
+  showTheatrePrompt,
+  showDateSelection,
+  toggleDateSelection,
+} from './menus/index.js';
+import { userService } from '../services/userService.js';
+import { giftCardService } from '../services/giftCardService.js';
 
 export interface JobDraft {
   movieName?: string;
@@ -37,6 +61,8 @@ export interface JobDraft {
 export interface SessionData {
   step?: string;
   jobDraft?: JobDraft;
+  menuMessageId?: number;
+  selectedDates?: string[];
 }
 
 export type MyContext = Context & SessionFlavor<SessionData>;
@@ -80,6 +106,13 @@ bot.command('setcontact', setContactCommand);
 // Settings commands
 bot.command('notifications', notificationsCommand);
 
+// Menu command
+bot.command('menu', async (ctx) => {
+  const msg = await ctx.reply('Loading menu...', { parse_mode: 'Markdown' });
+  ctx.session.menuMessageId = msg.message_id;
+  await showMainMenu(ctx);
+});
+
 // Handle messages for interactive job creation
 bot.on('message:text', async (ctx, next) => {
   const handled = await handleJobMessage(ctx);
@@ -88,19 +121,158 @@ bot.on('message:text', async (ctx, next) => {
   }
 });
 
-// Handle callback queries for job creation and settings buttons
-bot.on('callback_query:data', async (ctx, next) => {
+// Handle all callback queries
+bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
-  if (data.startsWith('time:')) {
-    await handleTimeCallback(ctx);
-  } else if (data.startsWith('seats:')) {
-    await handleSeatsCallback(ctx);
-  } else if (data.startsWith('notify:')) {
-    await handleNotificationCallback(ctx);
-  } else {
-    await next();
+
+  try {
+    // Menu navigation
+    if (data === 'menu:main') {
+      ctx.session.step = undefined;
+      ctx.session.selectedDates = undefined;
+      await showMainMenu(ctx);
+    } else if (data === 'menu:jobs') {
+      await showJobsList(ctx);
+    } else if (data === 'menu:cards') {
+      await showCardsList(ctx);
+    } else if (data === 'menu:settings') {
+      await showSettings(ctx);
+    } else if (data === 'menu:newjob') {
+      await showNewJobStart(ctx);
+    }
+
+    // Job actions
+    else if (data.startsWith('job:view:')) {
+      await showJobDetail(ctx, data.replace('job:view:', ''));
+    } else if (data.startsWith('job:cancel:')) {
+      await showCancelJobConfirm(ctx, data.replace('job:cancel:', ''));
+    } else if (data.startsWith('job:confirm_cancel:')) {
+      await cancelJob(ctx, data.replace('job:confirm_cancel:', ''));
+    } else if (data === 'job:back:city') {
+      ctx.session.step = 'job_city';
+      await showCitySelection(ctx);
+    } else if (data === 'job:back:theatre') {
+      ctx.session.step = 'job_theatre';
+      await showTheatrePrompt(ctx);
+    }
+
+    // City selection
+    else if (data.startsWith('city:')) {
+      const city = data.replace('city:', '');
+      if (city === 'other') {
+        ctx.session.step = 'job_city_text';
+        await ctx.editMessageText(
+          `*Create New Booking Job*\n\n` +
+          `Movie: *${ctx.session.jobDraft?.movieName}*\n\n` +
+          `*Step 2/5: City*\n\n` +
+          `Type your city name:`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        ctx.session.jobDraft = { ...ctx.session.jobDraft, city };
+        ctx.session.step = 'job_theatre';
+        await showTheatrePrompt(ctx);
+      }
+    }
+
+    // Date selection
+    else if (data.startsWith('date:toggle:')) {
+      await toggleDateSelection(ctx, data.replace('date:toggle:', ''));
+    } else if (data === 'date:any') {
+      ctx.session.selectedDates = [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredDates: undefined };
+      ctx.session.step = 'job_time';
+      await handleTimeSelection(ctx);
+    } else if (data === 'date:done') {
+      const selectedDates = ctx.session.selectedDates || [];
+      ctx.session.jobDraft = { ...ctx.session.jobDraft, preferredDates: selectedDates };
+      ctx.session.step = 'job_time';
+      await handleTimeSelection(ctx);
+    } else if (data === 'job:back:dates') {
+      ctx.session.step = 'job_date';
+      await showDateSelection(ctx);
+    }
+
+    // Time and seats (existing handlers)
+    else if (data.startsWith('time:')) {
+      await handleTimeCallback(ctx);
+    } else if (data.startsWith('seats:')) {
+      await handleSeatsCallback(ctx);
+    }
+
+    // Card actions
+    else if (data === 'card:add') {
+      await showAddCardPrompt(ctx);
+    } else if (data.startsWith('card:view:')) {
+      await showCardDetail(ctx, data.replace('card:view:', ''));
+    } else if (data.startsWith('card:remove:')) {
+      await showRemoveCardConfirm(ctx, data.replace('card:remove:', ''));
+    } else if (data.startsWith('card:confirm_remove:')) {
+      await removeCard(ctx, data.replace('card:confirm_remove:', ''));
+    }
+
+    // Settings
+    else if (data === 'settings:main') {
+      await showSettings(ctx);
+    } else if (data === 'settings:notifications') {
+      await showNotifications(ctx);
+    } else if (data === 'settings:contact') {
+      await showContactInfo(ctx);
+    } else if (data.startsWith('notify:')) {
+      await toggleNotification(ctx, data.replace('notify:', ''));
+    } else if (data === 'contact:update') {
+      await showContactPrompt(ctx);
+    }
+
+    // Answer callback if not already answered
+    if (!ctx.callbackQuery.data.startsWith('notify:')) {
+      await ctx.answerCallbackQuery().catch(() => {});
+    }
+  } catch (error) {
+    logger.error('Callback query error', { error: String(error), data });
+    await ctx.answerCallbackQuery({ text: 'Something went wrong' }).catch(() => {});
   }
 });
+
+// Helper function for time selection
+async function handleTimeSelection(ctx: MyContext): Promise<void> {
+  const draft = ctx.session.jobDraft || {};
+  const TIME_RANGES = {
+    midnight: { label: 'Midnight', times: ['12:00 AM', '1:00 AM', '2:00 AM', '3:00 AM'] },
+    early: { label: 'Early (4-8 AM)', times: ['4:00 AM', '5:00 AM', '6:00 AM', '7:00 AM', '8:00 AM'] },
+    morning: { label: 'Morning', times: ['9:00 AM', '10:00 AM', '11:00 AM'] },
+    afternoon: { label: 'Afternoon', times: ['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'] },
+    evening: { label: 'Evening', times: ['4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'] },
+    night: { label: 'Night', times: ['8:00 PM', '9:00 PM', '10:00 PM', '11:00 PM'] },
+  };
+
+  const { InlineKeyboard } = await import('grammy');
+  const timeKeyboard = new InlineKeyboard()
+    .text(TIME_RANGES.midnight.label, 'time:midnight')
+    .text(TIME_RANGES.early.label, 'time:early')
+    .row()
+    .text(TIME_RANGES.morning.label, 'time:morning')
+    .text(TIME_RANGES.afternoon.label, 'time:afternoon')
+    .row()
+    .text(TIME_RANGES.evening.label, 'time:evening')
+    .text(TIME_RANGES.night.label, 'time:night')
+    .row()
+    .text('Any Time', 'time:any')
+    .row()
+    .text('Back', 'job:back:dates')
+    .text('Cancel', 'menu:main');
+
+  await ctx.editMessageText(
+    `*Create New Booking Job*\n\n` +
+    `Movie: *${draft.movieName}*\n` +
+    `City: *${draft.city}*\n` +
+    `Theatre(s): *${draft.theatres?.join(', ')}*\n` +
+    `Date(s): *${draft.preferredDates?.join(', ') || 'Any'}*\n\n` +
+    `*Step 5/6: Preferred Time*\n\n` +
+    `Select your preferred showtime:`,
+    { parse_mode: 'Markdown', reply_markup: timeKeyboard }
+  );
+}
 
 // Error handler
 bot.catch((err) => {
